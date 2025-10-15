@@ -417,14 +417,21 @@ class CardCommands(commands.Cog):
                 await ctx.send(f"❌ {error_msg}")
                 return
             
-            # Update database
-            await conn.execute(
-                """INSERT INTO drop_rates (guild_id, rarity, percentage)
-                   VALUES ($1, $2, $3)
-                   ON CONFLICT (guild_id, rarity)
-                   DO UPDATE SET percentage = $3""",
-                guild_id, rarity, percentage
-            )
+            # Update database - store ALL rarities for this guild to ensure consistency
+            async with conn.transaction():
+                # Delete existing rates for this guild
+                await conn.execute(
+                    "DELETE FROM drop_rates WHERE guild_id = $1",
+                    guild_id
+                )
+                
+                # Insert all rarities with updated values
+                for r in RARITY_HIERARCHY:
+                    await conn.execute(
+                        """INSERT INTO drop_rates (guild_id, rarity, percentage)
+                           VALUES ($1, $2, $3)""",
+                        guild_id, r, current_rates[r]
+                    )
         
         # Show updated rates
         embed = discord.Embed(

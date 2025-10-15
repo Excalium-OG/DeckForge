@@ -4,7 +4,7 @@
 
 DeckForge is a Discord bot that implements a collectible rocket-themed trading card game. The bot enables users to collect cards through a time-gated drop system, view their collections, and interact with card information. The system is designed with a phased rollout approach, with Phase 1 focusing on core card collection mechanics and admin tools, while future phases will introduce gameplay mechanics, trading, and monetization features.
 
-**Status**: Phase 1 Complete ✅ - Bot is production-ready and running
+**Status**: Phase 1 + Drop Rates Complete ✅ - Bot is production-ready and running with configurable drop rates
 
 ## User Preferences
 
@@ -35,10 +35,11 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL for persistent storage
 - **Connection Management**: asyncpg connection pooling (min_size=2, max_size=10, 60s timeout)
 - **Async Operations**: All database operations use async/await pattern for non-blocking I/O
-- **Schema Design**: Three core tables:
+- **Schema Design**: Four core tables:
   1. `players` - User profiles, credits, and drop cooldown timestamps
   2. `cards` - Master card definitions with metadata and images
   3. `user_cards` - Individual card instances owned by players (uses UUID for unique identification)
+  4. `drop_rates` - Guild-specific rarity drop rate configuration (guild_id, rarity, percentage)
 
 **Rationale**: PostgreSQL provides ACID compliance for critical game data. Connection pooling prevents connection exhaustion under load. UUID-based card instances enable unique ownership and future trading mechanics.
 
@@ -46,6 +47,8 @@ Preferred communication style: Simple, everyday language.
 - **Drop System**: Time-gated card acquisition (2 random cards every 8 hours)
 - **Cooldown Tracking**: Timestamp-based cooldown stored in `players.last_drop_ts`
 - **Rarity System**: Seven-tier hierarchy (Common → Uncommon → Exceptional → Rare → Epic → Legendary → Mythic)
+- **Drop Rates**: Configurable weighted probabilities per guild with validation (must sum to 100%)
+- **Default Drop Rates**: Common 40%, Uncommon 25%, Exceptional 15%, Rare 10%, Epic 6%, Legendary 3%, Mythic 1%
 - **Card Sorting**: Cards displayed by rarity (ascending), then alphabetically by name
 - **Instance-Based Ownership**: Each dropped card creates a unique instance with UUID
 
