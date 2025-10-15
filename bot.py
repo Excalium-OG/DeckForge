@@ -13,7 +13,7 @@ import asyncio
 load_dotenv()
 
 # Bot configuration
-DISCORD_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+DISCORD_TOKEN = os.getenv('DECKFORGE_BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 COMMAND_PREFIX = '!'
 
@@ -112,12 +112,12 @@ async def main():
     """Main entry point"""
     # Check for Discord token
     if not DISCORD_TOKEN:
-        print("❌ ERROR: DISCORD_BOT_TOKEN not found in environment variables!")
+        print("❌ ERROR: DECKFORGE_BOT_TOKEN not found in environment variables!")
         print("Please set up your Discord bot token:")
         print("1. Go to https://discord.com/developers/applications")
         print("2. Create a new application or select existing one")
         print("3. Go to 'Bot' section and copy the token")
-        print("4. Add DISCORD_BOT_TOKEN to your environment variables or .env file")
+        print("4. Add DECKFORGE_BOT_TOKEN to your environment variables or .env file")
         return
     
     if not DATABASE_URL:
