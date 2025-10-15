@@ -1,0 +1,106 @@
+Extend the existing Discord bot (Phase 1) to support a pack-based card drop system with multiple pack types, inventory limits, and trading scaffolding. Use discord.py and PostgreSQL via asyncpg. Bot prefix is `!`.
+
+---
+
+🎯 Scope
+
+✅ Pack Types
+
+Implement three pack types:
+
+• `Normal Pack`: Uses base rarity drop rates
+• `Booster Pack`: Doubles the drop rate for higher rarities
+• `Booster Pack+`: Triples the drop rate for higher rarities
+
+
+Each pack gives 2 cards when opened.
+
+---
+
+✅ Pack Inventory System
+
+Create a new table to track pack inventory per user:
+
+CREATE TABLE user_packs (
+  user_id BIGINT,
+  pack_type TEXT,
+  quantity INT,
+  PRIMARY KEY (user_id, pack_type)
+);
+
+• Enforce a maximum of 30 total packs per user across all types.
+• Reject `!claimfreepack` or trades that would exceed this cap.
+
+
+---
+
+✅ Commands
+
+Command	Description	
+!claimfreepack	Adds 1 Normal Pack every 8 hours (if under cap)	
+!drop [amount] [pack_type]	Opens specified number of packs (default: Normal)	
+!mypacks	Lists current pack inventory	
+!offerpack [@user] [pack_type] [quantity]	Placeholder for initiating a pack trade	
+!acceptpacktrade [trade_id]	Placeholder for accepting a trade	
+
+
+---
+
+✅ Drop Rate Modifiers
+
+Use the following base rarity distribution:
+
+Rarity	Base Rate (%)	
+Common	40	
+Uncommon	25	
+Exceptional	15	
+Rare	10	
+Epic	6	
+Legendary	3	
+Mythic	1	
+
+
+Apply modifiers:
+
+• Booster Pack: Multiply higher rarity rates by 2
+• Booster Pack+: Multiply higher rarity rates by 3
+• Normalize total to 100% before rolling
+
+
+---
+
+✅ Trading Scaffolding
+
+Create a placeholder table for pack trades:
+
+CREATE TABLE pack_trades (
+  trade_id UUID PRIMARY KEY,
+  sender_id BIGINT,
+  receiver_id BIGINT,
+  pack_type TEXT,
+  quantity INT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT now()
+);
+
+No trade logic yet—just scaffolding and placeholder commands.
+
+---
+
+🔐 Permissions & Validation
+
+• Enforce 8-hour cooldown for `!claimfreepack`
+• Validate pack type against allowed values
+• Enforce inventory cap of 30 packs
+• Reject `!drop` if user lacks sufficient packs
+• Restrict trading commands to valid users
+
+
+---
+
+🗂️ File-Level Tasks
+
+• `db/migrations/0003_pack_system.sql`: Create `user_packs` and `pack_trades`
+• `cogs/packs.py`: Implement all new commands
+• `utils/drop_logic.py`: Handle rarity weighting and modifiers
+• `tests/test_packs.py`: Validate pack claiming, dropping, and inventory limits
