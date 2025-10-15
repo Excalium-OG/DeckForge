@@ -62,19 +62,24 @@ class DeckForgeBot(commands.Bot):
     
     async def run_migrations(self):
         """Run database migrations"""
-        migration_file = 'db/migrations/0001_cardbot.sql'
-        
-        if not os.path.exists(migration_file):
-            print(f"⚠️ Migration file not found: {migration_file}")
-            return
-        
-        with open(migration_file, 'r') as f:
-            migration_sql = f.read()
+        migration_files = [
+            'db/migrations/0001_cardbot.sql',
+            'db/migrations/0002_drop_rates.sql'
+        ]
         
         async with self.db_pool.acquire() as conn:
-            await conn.execute(migration_sql)
+            for migration_file in migration_files:
+                if not os.path.exists(migration_file):
+                    print(f"⚠️ Migration file not found: {migration_file}")
+                    continue
+                
+                with open(migration_file, 'r') as f:
+                    migration_sql = f.read()
+                
+                await conn.execute(migration_sql)
+                print(f"✅ Executed migration: {migration_file}")
         
-        print("✅ Database migrations completed")
+        print("✅ All database migrations completed")
     
     async def on_ready(self):
         """Called when bot is ready"""
