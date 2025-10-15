@@ -333,6 +333,119 @@ class CardCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
+    @commands.command(name='viewdroprates')
+    async def view_drop_rates(self, ctx):
+        """
+        View current drop rates for this server.
+        Usage: !viewdroprates
+        """
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        async with self.db_pool.acquire() as conn:
+            drop_rates = await self.get_guild_drop_rates(conn, guild_id)
+        
+        # Check if using defaults
+        rates_rows = await self.db_pool.fetchrow(
+            "SELECT COUNT(*) as count FROM drop_rates WHERE guild_id = $1",
+            guild_id
+        )
+        using_defaults = rates_rows['count'] == 0 if rates_rows else True
+        
+        embed = discord.Embed(
+            title="🎲 Drop Rates Configuration",
+            description="Current card drop rates for this server:",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="Drop Rates",
+            value=format_drop_rates_table(drop_rates),
+            inline=False
+        )
+        
+        if using_defaults:
+            embed.set_footer(text="Using default rates. Admins can customize with !setdroprate")
+        else:
+            embed.set_footer(text="Custom rates configured for this server")
+        
+        await ctx.send(embed=embed)
+    
+    @commands.command(name='setdroprate')
+    async def set_drop_rate(self, ctx, rarity: str, percentage: float):
+        """
+        [ADMIN] Set the drop rate for a specific rarity.
+        Usage: !setdroprate [rarity] [percentage]
+        Example: !setdroprate Legendary 5
+        """
+        # Check admin permission
+        if not self.is_admin(ctx.author.id):
+            await ctx.send("❌ This command is admin-only!")
+            return
+        
+        guild_id = ctx.guild.id if ctx.guild else None
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        # Validate rarity
+        rarity = rarity.capitalize()
+        if not validate_rarity(rarity):
+            await ctx.send(
+                f"❌ Invalid rarity! Must be one of: {', '.join(RARITY_HIERARCHY)}"
+            )
+            return
+        
+        # Validate percentage
+        if percentage < 0 or percentage > 100:
+            await ctx.send("❌ Percentage must be between 0 and 100!")
+            return
+        
+        async with self.db_pool.acquire() as conn:
+            # Get current rates for this guild
+            current_rates = await self.get_guild_drop_rates(conn, guild_id)
+            
+            # Update the specified rarity
+            current_rates[rarity] = percentage
+            
+            # Validate total sum
+            is_valid, error_msg = validate_drop_rates(current_rates)
+            if not is_valid:
+                await ctx.send(f"❌ {error_msg}")
+                return
+            
+            # Update database
+            await conn.execute(
+                """INSERT INTO drop_rates (guild_id, rarity, percentage)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (guild_id, rarity)
+                   DO UPDATE SET percentage = $3""",
+                guild_id, rarity, percentage
+            )
+        
+        # Show updated rates
+        embed = discord.Embed(
+            title="✅ Drop Rate Updated!",
+            description=f"**{rarity}** drop rate set to **{percentage}%**",
+            color=discord.Color.green()
+        )
+        
+        embed.add_field(
+            name="Updated Rates",
+            value=format_drop_rates_table(current_rates),
+            inline=False
+        )
+        
+        total = sum(current_rates.values())
+        if abs(total - 100.0) < 0.01:
+            embed.set_footer(text="✅ All rates configured correctly (total = 100%)")
+        else:
+            embed.set_footer(text=f"⚠️ Total is {total}% - adjust other rarities to reach 100%")
+        
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):
