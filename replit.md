@@ -51,7 +51,10 @@ Preferred communication style: Simple, everyday language.
 
 #### Pack System (Phase 2)
 - **Pack Types**: Three tiers - Normal Pack, Booster Pack, Booster Pack+
-- **Pack Acquisition**: Free Normal Pack every 8 hours via `!claimfreepack` (30 pack inventory limit)
+- **Pack Acquisition**: 
+  - Free Normal Pack every 8 hours via `!claimfreepack` (30 pack inventory limit)
+  - Purchase packs with credits via `!buypack [amount] [pack_type]`
+- **Pack Pricing**: Normal Pack (100 credits), Booster Pack (300 credits), Booster Pack+ (500 credits)
 - **Pack Opening**: `!drop [amount] [pack_type]` opens packs to receive 2 cards per pack
 - **Pack Inventory**: Maximum 30 total packs across all types per user
 - **Rarity Modifiers**:
@@ -78,12 +81,21 @@ Preferred communication style: Simple, everyday language.
 **Rationale**: URL-based storage is flexible for various hosting solutions. Phase 1 likely stores URLs pointing to Discord CDN or external hosting.
 
 ### Command Design Patterns
-- **Help System**: Uses discord.py's default help command
+- **Help System**: Custom help command that filters admin-only commands based on user permissions
+  - Admin commands marked with [ADMIN] tag are hidden from non-admin users in help output
+  - Admins see all commands; regular users only see commands they can use
 - **Error Handling**: Validation checks before database operations (rarity validation, pack type validation, inventory limits)
 - **User Feedback**: Rich embeds for card/pack displays, plain text for errors and confirmations
 - **Future-Proofing**: Placeholder commands for pack trading (`!offerpack`, `!acceptpacktrade`) and other features (`!recycle`, `!buycredits`, `!launch`)
 
-**Rationale**: Clear separation between implemented and planned features helps manage user expectations while providing a roadmap for development.
+**Admin Commands**:
+- `!addcard` - Add new cards to the collection
+- `!setdroprate` - Configure guild-specific drop rates
+- `!viewdroprates` - View current drop rate configuration (accessible to all, but admin-configurable)
+- `!givecredits` - Award credits to users for testing/rewards
+- `!resetpacktimer` - Reset free pack claim cooldown for testing
+
+**Rationale**: Clear separation between implemented and planned features helps manage user expectations while providing a roadmap for development. Permission-based help system prevents confusion by only showing relevant commands.
 
 ## External Dependencies
 

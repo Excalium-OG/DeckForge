@@ -56,6 +56,7 @@ class DeckForgeBot(commands.Bot):
         await self.run_migrations()
         
         # Load cogs
+        await self.load_extension('cogs.custom_help')
         await self.load_extension('cogs.cards')
         await self.load_extension('cogs.packs')
         await self.load_extension('cogs.future')
