@@ -4,7 +4,7 @@
 
 DeckForge is a Discord bot that implements a collectible rocket-themed trading card game. The bot enables users to collect cards through a time-gated drop system, view their collections, and interact with card information. The system is designed with a phased rollout approach, with Phase 1 focusing on core card collection mechanics and admin tools, while future phases will introduce gameplay mechanics, trading, and monetization features.
 
-**Status**: Phase 1 + Drop Rates Complete ✅ - Bot is production-ready and running with configurable drop rates
+**Status**: Phase 2 Complete ✅ - Pack-based card system with inventory management and configurable drop rates
 
 ## User Preferences
 
@@ -17,9 +17,11 @@ Preferred communication style: Simple, everyday language.
 - **Command System**: Prefix-based commands using "!" as the command prefix
 - **Bot Architecture**: Custom bot class (DeckForgeBot) extends commands.Bot to integrate database connection pooling
 - **Code Organization**: Cog-based architecture to separate concerns:
-  - `cogs/cards.py` - Core card collection and management commands
+  - `cogs/cards.py` - Card opening and management commands (!drop, !mycards, !cardinfo, !addcard)
+  - `cogs/packs.py` - Pack inventory and claiming commands (!claimfreepack, !mypacks, trading placeholders)
   - `cogs/future.py` - Placeholder commands for future features
   - `utils/card_helpers.py` - Shared utility functions for card operations
+  - `utils/pack_logic.py` - Pack type validation and rarity modifier calculations
 
 **Rationale**: The cog-based architecture provides modularity and maintainability, allowing features to be organized by domain and easily extended in future phases.
 
@@ -35,24 +37,37 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL for persistent storage
 - **Connection Management**: asyncpg connection pooling (min_size=2, max_size=10, 60s timeout)
 - **Async Operations**: All database operations use async/await pattern for non-blocking I/O
-- **Schema Design**: Four core tables:
-  1. `players` - User profiles, credits, and drop cooldown timestamps
+- **Schema Design**: Six core tables:
+  1. `players` - User profiles, credits, and pack claim cooldown timestamps
   2. `cards` - Master card definitions with metadata and images
   3. `user_cards` - Individual card instances owned by players (uses UUID for unique identification)
   4. `drop_rates` - Guild-specific rarity drop rate configuration (guild_id, rarity, percentage)
+  5. `user_packs` - Pack inventory per user (user_id, pack_type, quantity) with 30 total pack limit
+  6. `pack_trades` - Pack trading scaffolding (trade_id, sender_id, receiver_id, pack_type, quantity, status)
 
-**Rationale**: PostgreSQL provides ACID compliance for critical game data. Connection pooling prevents connection exhaustion under load. UUID-based card instances enable unique ownership and future trading mechanics.
+**Rationale**: PostgreSQL provides ACID compliance for critical game data. Connection pooling prevents connection exhaustion under load. UUID-based card instances enable unique ownership and future trading mechanics. Pack inventory system enables strategic collection gameplay.
 
 ### Core Game Mechanics
-- **Drop System**: Time-gated card acquisition (2 random cards every 8 hours)
-- **Cooldown Tracking**: Timestamp-based cooldown stored in `players.last_drop_ts`
+
+#### Pack System (Phase 2)
+- **Pack Types**: Three tiers - Normal Pack, Booster Pack, Booster Pack+
+- **Pack Acquisition**: Free Normal Pack every 8 hours via `!claimfreepack` (30 pack inventory limit)
+- **Pack Opening**: `!drop [amount] [pack_type]` opens packs to receive 2 cards per pack
+- **Pack Inventory**: Maximum 30 total packs across all types per user
+- **Rarity Modifiers**:
+  - Normal Pack: Uses base drop rates
+  - Booster Pack: 2x multiplier on Epic, Legendary, Mythic rates (normalized to 100%)
+  - Booster Pack+: 3x multiplier on Epic, Legendary, Mythic rates (normalized to 100%)
+
+#### Card System
+- **Cooldown Tracking**: Timestamp-based cooldown stored in `players.last_drop_ts` (used for pack claiming)
 - **Rarity System**: Seven-tier hierarchy (Common → Uncommon → Exceptional → Rare → Epic → Legendary → Mythic)
 - **Drop Rates**: Configurable weighted probabilities per guild with validation (must sum to 100%)
-- **Default Drop Rates**: Common 40%, Uncommon 25%, Exceptional 15%, Rare 10%, Epic 6%, Legendary 3%, Mythic 1%
+- **Default Base Rates**: Common 40%, Uncommon 25%, Exceptional 15%, Rare 10%, Epic 6%, Legendary 3%, Mythic 1%
 - **Card Sorting**: Cards displayed by rarity (ascending), then alphabetically by name
-- **Instance-Based Ownership**: Each dropped card creates a unique instance with UUID
+- **Instance-Based Ownership**: Each card from a pack creates a unique instance with UUID
 
-**Rationale**: Time-gated drops encourage regular engagement without overwhelming users. UUID instances enable future features like trading, recycling, and unique card histories.
+**Rationale**: Pack-based system adds depth and strategy to collection. Booster packs provide progression incentive. Time-gated pack claiming encourages regular engagement without overwhelming users. UUID instances enable future features like trading, recycling, and unique card histories.
 
 ### Image & Asset Management
 - **Card Images**: Stored as URLs (image_url field in cards table)
@@ -64,9 +79,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Command Design Patterns
 - **Help System**: Uses discord.py's default help command
-- **Error Handling**: Validation checks before database operations (rarity validation, UUID format, ownership checks)
-- **User Feedback**: Rich embeds for card displays, plain text for errors and confirmations
-- **Future-Proofing**: Placeholder commands (`!recycle`, `!buycredits`, `!launch`) prepared for Phase 2
+- **Error Handling**: Validation checks before database operations (rarity validation, pack type validation, inventory limits)
+- **User Feedback**: Rich embeds for card/pack displays, plain text for errors and confirmations
+- **Future-Proofing**: Placeholder commands for pack trading (`!offerpack`, `!acceptpacktrade`) and other features (`!recycle`, `!buycredits`, `!launch`)
 
 **Rationale**: Clear separation between implemented and planned features helps manage user expectations while providing a roadmap for development.
 

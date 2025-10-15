@@ -25,6 +25,11 @@ from utils.drop_helpers import (
     select_rarity_by_weight,
     format_drop_rates_table
 )
+from utils.pack_logic import (
+    validate_pack_type,
+    format_pack_type,
+    apply_pack_modifier
+)
 
 
 class CardCommands(commands.Cog):
@@ -63,43 +68,68 @@ class CardCommands(commands.Cog):
         return rates
     
     @commands.command(name='drop')
-    async def drop_cards(self, ctx):
+    async def drop_cards(self, ctx, amount: int = 1, pack_type: str = "Normal Pack"):
         """
-        Claim 2 randomized cards every 8 hours.
-        Usage: !drop
+        Open packs to get cards. Each pack gives 2 cards.
+        Usage: !drop [amount] [pack_type]
+        Examples: !drop, !drop 2, !drop 1 "Booster Pack"
         """
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
+        # Validate amount
+        if amount < 1 or amount > 10:
+            await ctx.send("❌ You can open 1-10 packs at a time!")
+            return
+        
+        # Format and validate pack type
+        pack_type = format_pack_type(pack_type)
+        if not validate_pack_type(pack_type):
+            await ctx.send(
+                f"❌ Invalid pack type! Must be one of: Normal Pack, Booster Pack, Booster Pack+"
+            )
+            return
+        
         async with self.db_pool.acquire() as conn:
-            # Get or create player record
-            player = await conn.fetchrow(
-                "SELECT user_id, last_drop_ts FROM players WHERE user_id = $1",
-                user_id
+            # Check if user has enough packs
+            current_qty = await conn.fetchval(
+                "SELECT quantity FROM user_packs WHERE user_id = $1 AND pack_type = $2",
+                user_id, pack_type
             )
             
-            if not player:
-                # Create new player
-                await conn.execute(
-                    "INSERT INTO players (user_id, credits, last_drop_ts) VALUES ($1, 0, NULL)",
-                    user_id
+            if not current_qty or current_qty < amount:
+                await ctx.send(
+                    f"❌ You don't have enough **{pack_type}**s!\n"
+                    f"You have: **{current_qty or 0}**, need: **{amount}**\n"
+                    f"Use `!mypacks` to see your inventory or `!claimfreepack` for a free pack."
                 )
-                last_drop_ts = None
-            else:
-                last_drop_ts = player['last_drop_ts']
-            
-            # Check cooldown
-            can_drop, time_remaining = check_drop_cooldown(last_drop_ts)
-            
-            if not can_drop and time_remaining:
-                cooldown_str = format_cooldown_time(time_remaining)
-                await ctx.send(f"⏰ You can drop cards again in **{cooldown_str}**!")
                 return
+            
+            # Remove packs from inventory
+            new_qty = current_qty - amount
+            if new_qty == 0:
+                await conn.execute(
+                    "DELETE FROM user_packs WHERE user_id = $1 AND pack_type = $2",
+                    user_id, pack_type
+                )
+            else:
+                await conn.execute(
+                    "UPDATE user_packs SET quantity = $3 WHERE user_id = $1 AND pack_type = $2",
+                    user_id, pack_type, new_qty
+                )
             
             # Get all available cards grouped by rarity
             all_cards = await conn.fetch("SELECT card_id, name, rarity FROM cards")
             
             if len(all_cards) == 0:
+                # Refund packs
+                await conn.execute(
+                    """INSERT INTO user_packs (user_id, pack_type, quantity)
+                       VALUES ($1, $2, $3)
+                       ON CONFLICT (user_id, pack_type)
+                       DO UPDATE SET quantity = user_packs.quantity + $3""",
+                    user_id, pack_type, amount
+                )
                 await ctx.send("❌ No cards in the database! Admin needs to add cards using `!addcard`.")
                 return
             
@@ -111,13 +141,16 @@ class CardCommands(commands.Cog):
                     cards_by_rarity[rarity] = []
                 cards_by_rarity[rarity].append(card)
             
-            # Get drop rates for this guild
-            drop_rates = await self.get_guild_drop_rates(conn, guild_id)
+            # Get base drop rates for this guild
+            base_rates = await self.get_guild_drop_rates(conn, guild_id)
             
-            # Select 2 cards using weighted rarity selection
+            # Apply pack modifier to get modified drop rates
+            drop_rates = apply_pack_modifier(base_rates, pack_type)
+            
+            # Open packs (2 cards per pack)
             dropped_cards = []
-            for _ in range(2):
-                # Select rarity based on weights
+            for _ in range(amount * 2):
+                # Select rarity based on modified weights
                 selected_rarity = select_rarity_by_weight(drop_rates)
                 
                 # Get cards of this rarity
@@ -146,33 +179,39 @@ class CardCommands(commands.Cog):
                 await conn.execute(
                     """INSERT INTO user_cards (instance_id, user_id, card_id, acquired_at, source)
                        VALUES ($1, $2, $3, $4, $5)""",
-                    instance_id, user_id, card['card_id'], datetime.now(timezone.utc), 'drop'
+                    instance_id, user_id, card['card_id'], datetime.now(timezone.utc), 'pack'
                 )
                 instances.append({
                     'instance_id': str(instance_id),
                     'name': card['name'],
                     'rarity': card['rarity']
                 })
-            
-            # Update last drop timestamp
-            await conn.execute(
-                "UPDATE players SET last_drop_ts = $1 WHERE user_id = $2",
-                datetime.now(timezone.utc), user_id
-            )
         
         # Send response
+        pack_emoji = "📦" if pack_type == "Normal Pack" else "🎁"
         embed = discord.Embed(
-            title="🚀 Card Drop!",
-            description=f"{ctx.author.mention} received:",
-            color=discord.Color.blue()
+            title=f"{pack_emoji} Opened {amount} {pack_type}{'s' if amount > 1 else ''}!",
+            description=f"{ctx.author.mention} received {len(instances)} cards:",
+            color=discord.Color.purple()
         )
         
+        # Group cards by rarity for display
+        rarity_groups = {}
         for inst in instances:
-            embed.add_field(
-                name=f"{inst['name']} ({inst['rarity']})",
-                value=f"Instance: `{inst['instance_id']}`",
-                inline=False
-            )
+            rarity = inst['rarity']
+            if rarity not in rarity_groups:
+                rarity_groups[rarity] = []
+            rarity_groups[rarity].append(inst['name'])
+        
+        # Display by rarity
+        for rarity in RARITY_HIERARCHY:
+            if rarity in rarity_groups:
+                cards = rarity_groups[rarity]
+                embed.add_field(
+                    name=f"{rarity} ({len(cards)})",
+                    value=", ".join(cards),
+                    inline=False
+                )
         
         await ctx.send(embed=embed)
     
@@ -195,7 +234,7 @@ class CardCommands(commands.Cog):
             )
         
         if not cards:
-            await ctx.send("📦 You don't have any cards yet! Use `!drop` to get your first cards.")
+            await ctx.send("📦 You don't have any cards yet! Use `!claimfreepack` to get a pack, then `!drop` to open it.")
             return
         
         # Convert to list of dicts and sort
