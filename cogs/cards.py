@@ -19,6 +19,12 @@ from utils.card_helpers import (
     create_card_embed,
     RARITY_HIERARCHY
 )
+from utils.drop_helpers import (
+    get_default_drop_rates,
+    validate_drop_rates,
+    select_rarity_by_weight,
+    format_drop_rates_table
+)
 
 
 class CardCommands(commands.Cog):
@@ -33,6 +39,29 @@ class CardCommands(commands.Cog):
         """Check if user is an admin"""
         return user_id in self.admin_ids or user_id == self.bot.owner_id
     
+    async def get_guild_drop_rates(self, conn, guild_id: Optional[int]) -> dict:
+        """Get drop rates for a guild, or defaults if not configured"""
+        if not guild_id:
+            return get_default_drop_rates()
+        
+        # Fetch guild-specific rates
+        rates_rows = await conn.fetch(
+            "SELECT rarity, percentage FROM drop_rates WHERE guild_id = $1",
+            guild_id
+        )
+        
+        if not rates_rows:
+            return get_default_drop_rates()
+        
+        rates = {row['rarity']: row['percentage'] for row in rates_rows}
+        
+        # Ensure all rarities are present
+        for rarity in RARITY_HIERARCHY:
+            if rarity not in rates:
+                return get_default_drop_rates()
+        
+        return rates
+    
     @commands.command(name='drop')
     async def drop_cards(self, ctx):
         """
@@ -40,6 +69,7 @@ class CardCommands(commands.Cog):
         Usage: !drop
         """
         user_id = ctx.author.id
+        guild_id = ctx.guild.id if ctx.guild else None
         
         async with self.db_pool.acquire() as conn:
             # Get or create player record
@@ -66,15 +96,48 @@ class CardCommands(commands.Cog):
                 await ctx.send(f"⏰ You can drop cards again in **{cooldown_str}**!")
                 return
             
-            # Get all available cards
+            # Get all available cards grouped by rarity
             all_cards = await conn.fetch("SELECT card_id, name, rarity FROM cards")
             
-            if len(all_cards) < 2:
-                await ctx.send("❌ Not enough cards in the database! Admin needs to add more cards using `!addcard`.")
+            if len(all_cards) == 0:
+                await ctx.send("❌ No cards in the database! Admin needs to add cards using `!addcard`.")
                 return
             
-            # Randomly select 2 cards
-            dropped_cards = random.sample(list(all_cards), min(2, len(all_cards)))
+            # Group cards by rarity
+            cards_by_rarity = {}
+            for card in all_cards:
+                rarity = card['rarity']
+                if rarity not in cards_by_rarity:
+                    cards_by_rarity[rarity] = []
+                cards_by_rarity[rarity].append(card)
+            
+            # Get drop rates for this guild
+            drop_rates = await self.get_guild_drop_rates(conn, guild_id)
+            
+            # Select 2 cards using weighted rarity selection
+            dropped_cards = []
+            for _ in range(2):
+                # Select rarity based on weights
+                selected_rarity = select_rarity_by_weight(drop_rates)
+                
+                # Get cards of this rarity
+                available_cards = cards_by_rarity.get(selected_rarity, [])
+                
+                # If no cards of this rarity exist, try again with any available rarity
+                if not available_cards:
+                    available_rarities = list(cards_by_rarity.keys())
+                    if not available_rarities:
+                        continue
+                    selected_rarity = random.choice(available_rarities)
+                    available_cards = cards_by_rarity[selected_rarity]
+                
+                # Select random card from this rarity
+                selected_card = random.choice(available_cards)
+                dropped_cards.append(selected_card)
+            
+            if not dropped_cards:
+                await ctx.send("❌ Unable to drop cards. Please contact an admin.")
+                return
             
             # Insert card instances
             instances = []
