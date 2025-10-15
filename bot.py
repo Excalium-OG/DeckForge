@@ -18,7 +18,7 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 COMMAND_PREFIX = '!'
 
 # Admin IDs (can be configured via environment variable)
-ADMIN_IDS = []
+ADMIN_IDS = [190506752112852992]
 admin_ids_env = os.getenv('ADMIN_IDS', '')
 if admin_ids_env:
     ADMIN_IDS = [int(id.strip()) for id in admin_ids_env.split(',') if id.strip()]
