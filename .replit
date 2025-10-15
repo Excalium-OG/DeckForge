@@ -6,3 +6,26 @@ integrations = ["python_database:1.0.0"]
 [nix]
 channel = "stable-25_05"
 packages = ["postgresql"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "DeckForge Bot"
+
+[[workflows.workflow]]
+name = "DeckForge Bot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python bot.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
