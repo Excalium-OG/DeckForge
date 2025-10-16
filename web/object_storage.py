@@ -17,24 +17,16 @@ class ObjectStorageService:
     """Service for interacting with Replit's object storage"""
     
     def __init__(self):
-        # Create proper external account credentials
-        credentials_info = {
-            "type": "external_account",
-            "audience": "replit",
-            "subject_token_type": "access_token",
-            "token_url": f"{REPLIT_SIDECAR_ENDPOINT}/token",
-            "credential_source": {
-                "url": f"{REPLIT_SIDECAR_ENDPOINT}/credential",
-                "format": {
-                    "type": "json",
-                    "subject_token_field_name": "access_token",
-                },
-            },
-            "universe_domain": "googleapis.com",
-        }
+        # Check if PRIVATE_OBJECT_DIR is set first
+        if not os.getenv("PRIVATE_OBJECT_DIR"):
+            raise ValueError(
+                "PRIVATE_OBJECT_DIR not set. Create a bucket in Replit's Object Storage "
+                "tool and set PRIVATE_OBJECT_DIR secret to your bucket path (e.g., /bucket-name)"
+            )
         
-        credentials = external_account.Credentials.from_info(credentials_info)
-        self.client = storage.Client(credentials=credentials, project="")
+        # For now, we'll use the sidecar endpoint directly for signing URLs
+        # The client initialization is deferred until needed
+        self.client = None
     
     def get_private_object_dir(self) -> str:
         """Get the private object directory from environment"""
@@ -96,8 +88,8 @@ class ObjectStorageService:
         
         return upload_url
     
-    async def get_image_blob(self, image_path: str) -> Optional[Blob]:
-        """Get the blob object for an image path"""
+    async def get_image_url(self, image_path: str) -> Optional[str]:
+        """Get a signed URL for reading an image"""
         if not image_path.startswith("/images/card-images/"):
             return None
         
@@ -107,14 +99,16 @@ class ObjectStorageService:
         full_path = f"{private_dir}/card-images/{image_id}"
         
         bucket_name, object_name = self._parse_object_path(full_path)
-        bucket = self.client.bucket(bucket_name)
-        blob = bucket.blob(object_name)
         
-        # Check if exists
-        if not blob.exists():
-            return None
+        # Get signed URL for reading
+        signed_url = await self._sign_object_url(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            method="GET",
+            ttl_sec=3600  # 1 hour
+        )
         
-        return blob
+        return signed_url
     
     def _parse_object_path(self, path: str) -> tuple[str, str]:
         """Parse object path into bucket name and object name"""

@@ -370,10 +370,22 @@ async def get_image_upload_url(request: Request, user = Depends(require_admin)):
     """Get a presigned URL for uploading an image"""
     file_extension = request.query_params.get("extension", "")
     
-    storage = ObjectStorageService()
-    upload_url = await storage.get_upload_url(file_extension)
-    
-    return {"uploadUrl": upload_url}
+    try:
+        storage = ObjectStorageService()
+        upload_url = await storage.get_upload_url(file_extension)
+        return {"uploadUrl": upload_url}
+    except ValueError as e:
+        # PRIVATE_OBJECT_DIR not set
+        raise HTTPException(
+            status_code=500, 
+            detail=str(e)
+        )
+    except Exception as e:
+        # Other storage errors
+        raise HTTPException(
+            status_code=500,
+            detail=f"Image upload not configured: {str(e)}"
+        )
 
 @app.post("/api/images/confirm")
 async def confirm_image_upload(
@@ -382,38 +394,33 @@ async def confirm_image_upload(
     user = Depends(require_admin)
 ):
     """Confirm image upload and return the image path for database storage"""
-    storage = ObjectStorageService()
-    image_path = storage.get_image_path(upload_url)
-    
-    return {"imagePath": image_path}
+    try:
+        storage = ObjectStorageService()
+        image_path = storage.get_image_path(upload_url)
+        return {"imagePath": image_path}
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image confirmation failed: {str(e)}")
 
 @app.get("/images/card-images/{image_id:path}")
 async def serve_card_image(image_id: str):
     """Serve uploaded card images from object storage"""
-    storage = ObjectStorageService()
-    image_path = f"/images/card-images/{image_id}"
-    
-    blob = await storage.get_image_blob(image_path)
-    if not blob:
-        raise HTTPException(status_code=404, detail="Image not found")
-    
-    # Stream the image
-    content = blob.download_as_bytes()
-    
-    # Determine content type
-    content_type = "image/jpeg"
-    if image_id.lower().endswith(".png"):
-        content_type = "image/png"
-    elif image_id.lower().endswith(".gif"):
-        content_type = "image/gif"
-    elif image_id.lower().endswith(".webp"):
-        content_type = "image/webp"
-    
-    return Response(
-        content=content,
-        media_type=content_type,
-        headers={"Cache-Control": "public, max-age=31536000"}  # Cache for 1 year
-    )
+    try:
+        storage = ObjectStorageService()
+        image_path = f"/images/card-images/{image_id}"
+        
+        signed_url = await storage.get_image_url(image_path)
+        if not signed_url:
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Redirect to the signed URL
+        return RedirectResponse(url=signed_url)
+    except ValueError:
+        # PRIVATE_OBJECT_DIR not set
+        raise HTTPException(status_code=500, detail="Object storage not configured")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/deck/create", response_class=HTMLResponse)
 async def create_deck_form(request: Request, user = Depends(require_admin)):
