@@ -20,48 +20,6 @@ class FutureCommands(commands.Cog):
         """Check if user is an admin"""
         return user_id in self.admin_ids or user_id == self.bot.owner_id
     
-    @commands.command(name='recycle')
-    async def recycle_card(self, ctx, instance_id: str):
-        """
-        [PLACEHOLDER] Recycle a card for credits.
-        Usage: !recycle [instance_id]
-        """
-        user_id = ctx.author.id
-        
-        try:
-            # Validate UUID format
-            import uuid
-            card_uuid = uuid.UUID(instance_id)
-        except ValueError:
-            await ctx.send("❌ Invalid instance ID format!")
-            return
-        
-        async with self.db_pool.acquire() as conn:
-            # Check if card exists and belongs to user
-            card = await conn.fetchrow(
-                """SELECT uc.instance_id, uc.user_id, c.name, c.rarity
-                   FROM user_cards uc
-                   JOIN cards c ON uc.card_id = c.card_id
-                   WHERE uc.instance_id = $1""",
-                card_uuid
-            )
-            
-            if not card:
-                await ctx.send("❌ Card not found!")
-                return
-            
-            if card['user_id'] != user_id:
-                await ctx.send("❌ You don't own this card!")
-                return
-            
-            # Delete the card (no credit reward yet)
-            await conn.execute(
-                "DELETE FROM user_cards WHERE instance_id = $1",
-                card_uuid
-            )
-        
-        await ctx.send(f"♻️ **{card['name']}** ({card['rarity']}) has been recycled! (Credit system coming in Phase 2)")
-    
     @commands.command(name='buycredits')
     async def buy_credits(self, ctx, amount: int = 100):
         """

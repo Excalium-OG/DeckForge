@@ -4,7 +4,7 @@
 
 DeckForge is a Discord bot that implements a collectible rocket-themed trading card game. The bot enables users to collect cards through a time-gated drop system, view their collections, and interact with card information. The system is designed with a phased rollout approach, with Phase 1 focusing on core card collection mechanics and admin tools, while future phases will introduce gameplay mechanics, trading, and monetization features.
 
-**Status**: Phase 2 Complete ✅ - Pack-based card system with inventory management and configurable drop rates
+**Status**: Phase 2 Extensions ✅ - Enhanced inventory UX, card recycling system, and player-to-player trading
 
 ## User Preferences
 
@@ -17,9 +17,11 @@ Preferred communication style: Simple, everyday language.
 - **Command System**: Prefix-based commands using "!" as the command prefix
 - **Bot Architecture**: Custom bot class (DeckForgeBot) extends commands.Bot to integrate database connection pooling
 - **Code Organization**: Cog-based architecture to separate concerns:
-  - `cogs/cards.py` - Card opening and management commands (!drop, !mycards, !cardinfo, !addcard)
-  - `cogs/packs.py` - Pack inventory and claiming commands (!claimfreepack, !mypacks, trading placeholders)
-  - `cogs/future.py` - Placeholder commands for future features
+  - `cogs/cards.py` - Card management commands (!drop, !mycards, !cardinfo, !addcard, !recycle)
+  - `cogs/packs.py` - Pack inventory and claiming commands (!claimfreepack, !mypacks, !buypack)
+  - `cogs/trading.py` - Player-to-player trading system (!requesttrade, !accepttrade, !tradeadd, !traderemove, !finalize)
+  - `cogs/custom_help.py` - Permission-aware help command
+  - `cogs/future.py` - Placeholder commands for future features (!buycredits, !launch)
   - `utils/card_helpers.py` - Shared utility functions for card operations
   - `utils/pack_logic.py` - Pack type validation and rarity modifier calculations
 
@@ -37,13 +39,15 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL for persistent storage
 - **Connection Management**: asyncpg connection pooling (min_size=2, max_size=10, 60s timeout)
 - **Async Operations**: All database operations use async/await pattern for non-blocking I/O
-- **Schema Design**: Six core tables:
+- **Schema Design**: Eight core tables:
   1. `players` - User profiles, credits, and pack claim cooldown timestamps
-  2. `cards` - Master card definitions with metadata and images
-  3. `user_cards` - Individual card instances owned by players (uses UUID for unique identification)
+  2. `cards` - Master card definitions with metadata, images, and extended rocket specifications
+  3. `user_cards` - Individual card instances owned by players (uses UUID for unique identification, includes recycled_at timestamp)
   4. `drop_rates` - Guild-specific rarity drop rate configuration (guild_id, rarity, percentage)
   5. `user_packs` - Pack inventory per user (user_id, pack_type, quantity) with 30 total pack limit
-  6. `pack_trades` - Pack trading scaffolding (trade_id, sender_id, receiver_id, pack_type, quantity, status)
+  6. `trades` - Active and completed card trades between players (UUID-based trade sessions with 5-minute timeout)
+  7. `trade_items` - Items offered in trades (card_id, quantity per user per trade)
+  8. Extended card fields: height, diameter, thrust, payload_leo, reusability
 
 **Rationale**: PostgreSQL provides ACID compliance for critical game data. Connection pooling prevents connection exhaustion under load. UUID-based card instances enable unique ownership and future trading mechanics. Pack inventory system enables strategic collection gameplay.
 
@@ -72,6 +76,54 @@ Preferred communication style: Simple, everyday language.
 
 **Rationale**: Pack-based system adds depth and strategy to collection. Booster packs provide progression incentive. Time-gated pack claiming encourages regular engagement without overwhelming users. UUID instances enable future features like trading, recycling, and unique card histories.
 
+#### Inventory Management (Phase 2 Extensions)
+- **Card Grouping**: !mycards groups identical cards by card_id with quantity display (x7) Falcon 9 (ID: 1)
+- **Pagination**: 8 cards per page with reaction-based navigation (⬅️ ➡️)
+- **Display Format**: Shows total cards owned and unique card count
+- **Navigation**: 60-second timeout for reactions, auto-cleanup after timeout
+- **No Image Previews**: Inventory displays as simple list for better performance
+
+**Rationale**: Grouping reduces clutter for users with many duplicates. Pagination handles large collections gracefully. Reaction-based navigation provides intuitive UX without requiring text commands.
+
+#### Card Recycling System (Phase 2 Extensions)
+- **Command**: !recycle [card_id] [amount] - Recycle duplicate cards for credits
+- **Credit Values by Rarity**:
+  - Common: 10 credits
+  - Uncommon: 25 credits
+  - Exceptional: 50 credits
+  - Rare: 100 credits
+  - Epic: 250 credits
+  - Legendary: 500 credits
+  - Mythic: 1000 credits
+- **Soft Delete**: Cards marked with `recycled_at` timestamp (preserves history)
+- **Validation**: Checks user owns sufficient quantity before recycling
+- **Limit**: Maximum 100 cards per recycle operation
+- **Transaction Safety**: Credits awarded and cards marked atomically
+
+**Rationale**: Recycling gives players a way to convert duplicates into progression currency. Soft delete preserves data for potential future features (rollback, statistics). Tiered pricing encourages strategic decisions about which cards to recycle.
+
+#### Player-to-Player Trading (Phase 2 Extensions)
+- **Trade Flow**: Multi-step confirmation process ensures both parties agree
+  1. !requesttrade @user - Initiates trade session
+  2. !accepttrade - Responder accepts invitation (activates trade)
+  3. !tradeadd [card_id] [amount] - Add cards to your offer
+  4. !traderemove [card_id] [amount] - Remove cards from your offer
+  5. !accepttrade (both users) - Confirm final trade terms
+  6. !finalize (both users) - Execute the trade
+- **Trade Timeout**: 5-minute expiration prevents stale sessions
+- **Trade Pool Visualization**: Dynamic embed shows both offers with rarity info
+- **State Management**: Trade status tracking (pending → active → accepted → completed)
+- **Safety Features**:
+  - Can't trade with yourself or bots
+  - Only one active trade per user at a time
+  - Inventory validation before trade execution
+  - Atomic transfers in transaction
+  - Acceptances reset when trade pool changes
+- **Additional Commands**:
+  - !canceltrade - Cancel active trade
+
+**Rationale**: Multi-step process prevents accidental trades and scams. Visual trade pool helps players verify offers. 5-minute timeout prevents abandoned trades from blocking users. Atomic transactions ensure trade integrity. State tracking provides clear UX about trade progress.
+
 ### Image & Asset Management
 - **Card Images**: Stored as URLs (image_url field in cards table)
 - **Image Upload**: Admin commands accept Discord message attachments
@@ -86,14 +138,33 @@ Preferred communication style: Simple, everyday language.
   - Admins see all commands; regular users only see commands they can use
 - **Error Handling**: Validation checks before database operations (rarity validation, pack type validation, inventory limits)
 - **User Feedback**: Rich embeds for card/pack displays, plain text for errors and confirmations
-- **Future-Proofing**: Placeholder commands for pack trading (`!offerpack`, `!acceptpacktrade`) and other features (`!recycle`, `!buycredits`, `!launch`)
+**Player Commands**:
+- `!claimfreepack` - Claim free Normal Pack (8-hour cooldown)
+- `!drop [amount] [pack_type]` - Open packs to receive cards
+- `!mypacks` - View pack inventory
+- `!mycards` - View card collection with pagination
+- `!cardinfo [name/ID]` - View detailed card information
+- `!buypack [amount] [pack_type]` - Purchase packs with credits
+- `!recycle [card_id] [amount]` - Recycle cards for credits
+- `!requesttrade @user` - Initiate trade with another player
+- `!accepttrade` - Accept trade request or confirm trade terms
+- `!tradeadd [card_id] [amount]` - Add cards to trade offer
+- `!traderemove [card_id] [amount]` - Remove cards from trade offer
+- `!finalize` - Execute trade (both players must confirm)
+- `!canceltrade` - Cancel active trade
+- `!balance` - Check credit balance
+- `!viewdroprates` - View server drop rate configuration
 
 **Admin Commands**:
-- `!addcard` - Add new cards to the collection
-- `!setdroprate` - Configure guild-specific drop rates
-- `!viewdroprates` - View current drop rate configuration (accessible to all, but admin-configurable)
-- `!givecredits` - Award credits to users for testing/rewards
-- `!resetpacktimer` - Reset free pack claim cooldown for testing
+- `!addcard [rarity] [name] [description]` - Add new cards with image
+- `!setdroprate [rarity] [percentage]` - Configure guild-specific drop rates
+- `!givecredits @user [amount]` - Award credits to users
+- `!resetpacktimer [@user]` - Reset free pack claim cooldown
+- `!updateimage [card_id]` - Update card image (with attachment)
+
+**Future Features**:
+- `!buycredits [amount]` - Purchase credits (Stripe integration planned)
+- `!launch [instance_id]` - Gameplay mechanics (Phase 3)
 
 **Rationale**: Clear separation between implemented and planned features helps manage user expectations while providing a roadmap for development. Permission-based help system prevents confusion by only showing relevant commands.
 

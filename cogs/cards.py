@@ -19,6 +19,17 @@ from utils.card_helpers import (
     create_card_embed,
     RARITY_HIERARCHY
 )
+
+# Recycle credit values by rarity
+RECYCLE_VALUES = {
+    'Common': 10,
+    'Uncommon': 25,
+    'Exceptional': 50,
+    'Rare': 100,
+    'Epic': 250,
+    'Legendary': 500,
+    'Mythic': 1000
+}
 from utils.drop_helpers import (
     get_default_drop_rates,
     validate_drop_rates,
@@ -218,18 +229,20 @@ class CardCommands(commands.Cog):
     @commands.command(name='mycards')
     async def my_cards(self, ctx):
         """
-        List all owned cards, sorted by rarity then alphabetically.
+        List all owned cards with pagination. Shows grouped cards by rarity.
         Usage: !mycards
         """
         user_id = ctx.author.id
         
         async with self.db_pool.acquire() as conn:
+            # Get all user cards with card details
             cards = await conn.fetch(
-                """SELECT uc.instance_id, c.card_id, c.name, c.rarity, c.image_url
+                """SELECT c.card_id, c.name, c.rarity, COUNT(*) as quantity
                    FROM user_cards uc
                    JOIN cards c ON uc.card_id = c.card_id
-                   WHERE uc.user_id = $1
-                   ORDER BY uc.acquired_at DESC""",
+                   WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
+                   GROUP BY c.card_id, c.name, c.rarity
+                   ORDER BY c.rarity, c.name""",
                 user_id
             )
         
@@ -237,47 +250,163 @@ class CardCommands(commands.Cog):
             await ctx.send("📦 You don't have any cards yet! Use `!claimfreepack` to get a pack, then `!drop` to open it.")
             return
         
-        # Convert to list of dicts and sort
+        # Convert to list and sort by rarity hierarchy
         cards_list = [dict(card) for card in cards]
         sorted_cards = sort_cards_by_rarity(cards_list)
         
-        # Create embed
+        # Build card lines with quantity
+        card_lines = []
+        total_count = 0
+        for card in sorted_cards:
+            qty = card['quantity']
+            total_count += qty
+            prefix = f"(x{qty})" if qty > 1 else ""
+            card_lines.append(f"{prefix} **{card['name']}** (ID: {card['card_id']})".strip())
+        
+        # Paginate: 8 lines per page
+        lines_per_page = 8
+        pages = []
+        for i in range(0, len(card_lines), lines_per_page):
+            page_lines = card_lines[i:i + lines_per_page]
+            pages.append(page_lines)
+        
+        # Create initial embed
+        current_page = 0
         embed = discord.Embed(
             title=f"🎴 {ctx.author.name}'s Card Collection",
-            description=f"Total cards: {len(sorted_cards)}",
+            description=f"Total cards: {total_count} | Unique: {len(sorted_cards)}",
             color=discord.Color.green()
         )
         
-        # Group by rarity for better display
-        current_rarity = None
-        rarity_cards = []
+        # Add page content
+        embed.add_field(
+            name=f"Page {current_page + 1}/{len(pages)}",
+            value="\n".join(pages[current_page]),
+            inline=False
+        )
         
-        for card in sorted_cards:
-            if card['rarity'] != current_rarity:
-                if rarity_cards:
+        message = await ctx.send(embed=embed)
+        
+        # Only add reactions if there are multiple pages
+        if len(pages) > 1:
+            await message.add_reaction("⬅️")
+            await message.add_reaction("➡️")
+            
+            def check(reaction, user):
+                return (
+                    user == ctx.author
+                    and str(reaction.emoji) in ["⬅️", "➡️"]
+                    and reaction.message.id == message.id
+                )
+            
+            # Handle pagination
+            while True:
+                try:
+                    reaction, user = await self.bot.wait_for("reaction_add", timeout=60.0, check=check)
+                    
+                    if str(reaction.emoji) == "➡️":
+                        current_page = (current_page + 1) % len(pages)
+                    elif str(reaction.emoji) == "⬅️":
+                        current_page = (current_page - 1) % len(pages)
+                    
+                    # Update embed
+                    embed = discord.Embed(
+                        title=f"🎴 {ctx.author.name}'s Card Collection",
+                        description=f"Total cards: {total_count} | Unique: {len(sorted_cards)}",
+                        color=discord.Color.green()
+                    )
                     embed.add_field(
-                        name=f"⭐ {current_rarity}",
-                        value="\n".join(rarity_cards),
+                        name=f"Page {current_page + 1}/{len(pages)}",
+                        value="\n".join(pages[current_page]),
                         inline=False
                     )
-                current_rarity = card['rarity']
-                rarity_cards = []
-            
-            rarity_cards.append(f"• **{card['name']}** (ID: {card['card_id']})")
+                    
+                    await message.edit(embed=embed)
+                    await message.remove_reaction(reaction, user)
+                    
+                except asyncio.TimeoutError:
+                    await message.clear_reactions()
+                    break
+    
+    @commands.command(name='recycle')
+    async def recycle_cards(self, ctx, card_id: int, amount: int = 1):
+        """
+        Recycle duplicate cards for credits.
+        Usage: !recycle [card_id] [amount]
+        Example: !recycle 5 3 (recycles 3 copies of card ID 5)
+        """
+        user_id = ctx.author.id
         
-        # Add last group
-        if rarity_cards:
-            embed.add_field(
-                name=f"⭐ {current_rarity}",
-                value="\n".join(rarity_cards),
-                inline=False
+        # Validate amount
+        if amount < 1:
+            await ctx.send("❌ Amount must be at least 1!")
+            return
+        
+        if amount > 100:
+            await ctx.send("❌ You can only recycle up to 100 cards at once!")
+            return
+        
+        async with self.db_pool.acquire() as conn:
+            # Get card info
+            card_info = await conn.fetchrow(
+                "SELECT name, rarity FROM cards WHERE card_id = $1",
+                card_id
             )
+            
+            if not card_info:
+                await ctx.send(f"❌ Card ID `{card_id}` does not exist!")
+                return
+            
+            # Check how many of this card the user owns
+            user_instances = await conn.fetch(
+                """SELECT instance_id FROM user_cards
+                   WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL
+                   ORDER BY acquired_at ASC
+                   LIMIT $3""",
+                user_id, card_id, amount
+            )
+            
+            if len(user_instances) < amount:
+                await ctx.send(
+                    f"❌ You don't have enough **{card_info['name']}** cards!\n"
+                    f"You have: **{len(user_instances)}**, trying to recycle: **{amount}**"
+                )
+                return
+            
+            # Calculate credits
+            rarity = card_info['rarity']
+            credit_value = RECYCLE_VALUES.get(rarity, 10)
+            total_credits = credit_value * amount
+            
+            # Use transaction to ensure atomicity
+            async with conn.transaction():
+                # Mark cards as recycled
+                instance_ids = [inst['instance_id'] for inst in user_instances]
+                await conn.execute(
+                    """UPDATE user_cards
+                       SET recycled_at = $1
+                       WHERE instance_id = ANY($2)""",
+                    datetime.now(timezone.utc),
+                    instance_ids
+                )
+                
+                # Credit user
+                await conn.execute(
+                    """INSERT INTO players (user_id, credits)
+                       VALUES ($1, $2)
+                       ON CONFLICT (user_id)
+                       DO UPDATE SET credits = players.credits + $2""",
+                    user_id, total_credits
+                )
         
-        # Set thumbnail if user has cards with images
-        for card in sorted_cards:
-            if card.get('image_url'):
-                embed.set_thumbnail(url=card['image_url'])
-                break
+        # Confirmation
+        embed = discord.Embed(
+            title="♻️ Cards Recycled!",
+            description=f"Recycled **{amount}x {card_info['name']}** ({rarity})",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="Credits Earned", value=f"+{total_credits} credits", inline=True)
+        embed.add_field(name="Value per Card", value=f"{credit_value} credits", inline=True)
         
         await ctx.send(embed=embed)
     

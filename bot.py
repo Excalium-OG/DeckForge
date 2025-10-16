@@ -59,6 +59,7 @@ class DeckForgeBot(commands.Bot):
         await self.load_extension('cogs.custom_help')
         await self.load_extension('cogs.cards')
         await self.load_extension('cogs.packs')
+        await self.load_extension('cogs.trading')
         await self.load_extension('cogs.future')
         print("✅ Loaded all cogs")
     
@@ -67,7 +68,8 @@ class DeckForgeBot(commands.Bot):
         migration_files = [
             'db/migrations/0001_cardbot.sql',
             'db/migrations/0002_drop_rates.sql',
-            'db/migrations/0003_pack_system.sql'
+            'db/migrations/0003_pack_system.sql',
+            'db/migrations/0004_phase2_extensions.sql'
         ]
         
         async with self.db_pool.acquire() as conn:
