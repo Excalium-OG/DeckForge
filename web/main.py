@@ -13,8 +13,13 @@ from datetime import datetime
 # Initialize FastAPI app
 app = FastAPI(title="DeckForge Admin Portal")
 
-# Add session middleware for OAuth
-app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production"))
+# Add session middleware for OAuth with proper cookie settings for iframe
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=os.getenv("SESSION_SECRET", "your-secret-key-change-in-production"),
+    same_site="none",  # Required for iframe/webview context
+    https_only=True    # Required when using SameSite=None
+)
 
 # Mount static files and templates
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
