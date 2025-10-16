@@ -59,6 +59,7 @@ Preferred communication style: Simple, everyday language.
 ### Environment Configuration
 - `DECKFORGE_BOT_TOKEN`, `DATABASE_URL`, `ADMIN_IDS` (optional) for the Discord bot.
 - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `DISCORD_REDIRECT_URI` for the Web Admin Portal.
+- `PRIVATE_OBJECT_DIR` for Replit object storage (format: `/bucket-name/path`, required for image uploads).
 
 ### Future Integrations (Planned)
 - **Stripe API**: For credit purchases.
