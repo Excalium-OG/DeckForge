@@ -71,7 +71,8 @@ class DeckForgeBot(commands.Bot):
             'db/migrations/0003_pack_system.sql',
             'db/migrations/0004_phase2_extensions.sql',
             'db/migrations/0005_web_admin.sql',
-            'db/migrations/0006_oauth_states.sql'
+            'db/migrations/0006_oauth_states.sql',
+            'db/migrations/0007_card_templates.sql'
         ]
         
         async with self.db_pool.acquire() as conn:

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Cooldown - {{ deck.name }}{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>Edit Free Pack Cooldown</h2>
+    <h3>{{ deck.name }}</h3>
+    
+    <form method="POST" action="/deck/{{ deck.deck_id }}/cooldown/update" class="cooldown-form">
+        <div class="form-group">
+            <label for="cooldown">Free Pack Cooldown (hours) *</label>
+            <input type="number" id="cooldown" name="free_pack_cooldown_hours" 
+                   min="1" max="168" value="{{ deck.free_pack_cooldown_hours }}" required>
+            <small>Time between free pack claims (1-168 hours). Default: 8 hours</small>
+        </div>
+        
+        <div class="info-box">
+            <h4>ℹ️ About Free Pack Cooldown</h4>
+            <p>This setting controls how often players can claim free packs from this deck on their Discord server.</p>
+            <ul>
+                <li><strong>Minimum:</strong> 1 hour (very frequent)</li>
+                <li><strong>Maximum:</strong> 168 hours (once per week)</li>
+                <li><strong>Recommended:</strong> 8-24 hours for balanced gameplay</li>
+            </ul>
+        </div>
+        
+        <div class="form-actions">
+            <a href="/deck/{{ deck.deck_id }}/edit" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Update Cooldown</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.info-box {
+    background: #e8f4f8;
+    border-left: 4px solid #5865f2;
+    padding: 15px;
+    margin: 20px 0;
+    border-radius: 4px;
+}
+
+.info-box h4 {
+    margin-top: 0;
+    color: #5865f2;
+}
+
+.info-box ul {
+    margin-bottom: 0;
+}
+</style>
+
+<script>
+document.querySelector('.cooldown-form').addEventListener('submit', function(e) {
+    const cooldown = parseInt(document.getElementById('cooldown').value);
+    if (cooldown < 1 || cooldown > 168) {
+        e.preventDefault();
+        alert('Cooldown must be between 1 and 168 hours');
+        return false;
+    }
+});
+</script>
+{% endblock %}

@@ -427,18 +427,24 @@ async def create_deck_form(request: Request, user = Depends(require_admin)):
 async def create_deck(
     request: Request,
     name: str = Form(...),
+    free_pack_cooldown_hours: int = Form(...),
     user = Depends(require_admin)
 ):
-    """Create a new deck"""
+    """Create a new deck with template fields"""
+    # Validate cooldown
+    if free_pack_cooldown_hours < 1 or free_pack_cooldown_hours > 168:
+        raise HTTPException(status_code=400, detail="Cooldown must be between 1 and 168 hours")
+    
     pool = await get_db_pool()
+    form_data = await request.form()
     
     async with pool.acquire() as conn:
-        # Create deck
+        # Create deck with cooldown
         deck = await conn.fetchrow(
-            """INSERT INTO decks (name, created_by)
-               VALUES ($1, $2)
+            """INSERT INTO decks (name, created_by, free_pack_cooldown_hours)
+               VALUES ($1, $2, $3)
                RETURNING deck_id, name""",
-            name, user['id']
+            name, user['id'], free_pack_cooldown_hours
         )
         
         # Create default rarity ranges (7-tier system)
@@ -458,6 +464,26 @@ async def create_deck(
                    VALUES ($1, $2, $3)""",
                 deck['deck_id'], rarity, rate
             )
+        
+        # Create template fields if provided
+        field_names = form_data.getlist('field_names[]')
+        field_types = form_data.getlist('field_types[]')
+        dropdown_options = form_data.getlist('dropdown_options[]')
+        is_required = form_data.getlist('is_required[]')
+        
+        for idx, field_name in enumerate(field_names):
+            if field_name:  # Skip empty names
+                field_type = field_types[idx] if idx < len(field_types) else 'text'
+                options = dropdown_options[idx] if idx < len(dropdown_options) else None
+                # is_required[] contains '1' for required, '0' for not required
+                required = is_required[idx] == '1' if idx < len(is_required) else False
+                
+                await conn.execute(
+                    """INSERT INTO card_templates 
+                       (deck_id, field_name, field_type, dropdown_options, field_order, is_required)
+                       VALUES ($1, $2, $3, $4, $5, $6)""",
+                    deck['deck_id'], field_name, field_type, options, idx, required
+                )
     
     return RedirectResponse(url=f"/deck/{deck['deck_id']}/edit", status_code=303)
 
@@ -480,17 +506,34 @@ async def edit_deck_form(request: Request, deck_id: int, user = Depends(require_
         if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
             raise HTTPException(status_code=403, detail="You don't own this deck")
         
-        # Get cards in this deck
-        cards = await conn.fetch(
-            """SELECT * FROM cards 
+        # Get template fields for this deck
+        template_fields = await conn.fetch(
+            """SELECT * FROM card_templates 
                WHERE deck_id = $1 
-               ORDER BY rarity, name""",
+               ORDER BY field_order""",
+            deck_id
+        )
+        
+        # Get cards in this deck with their template field values
+        cards = await conn.fetch(
+            """SELECT c.*, 
+                      array_agg(json_build_object(
+                          'template_id', ctf.template_id,
+                          'field_value', ctf.field_value
+                      ) ORDER BY ct.field_order) FILTER (WHERE ctf.field_id IS NOT NULL) as template_values
+               FROM cards c
+               LEFT JOIN card_template_fields ctf ON c.card_id = ctf.card_id
+               LEFT JOIN card_templates ct ON ctf.template_id = ct.template_id
+               WHERE c.deck_id = $1 
+               GROUP BY c.card_id
+               ORDER BY c.rarity, c.name""",
             deck_id
         )
     
     return templates.TemplateResponse("edit_deck.html", {
         "request": request,
         "user": user,
+        "template_fields": template_fields,
         "deck": dict(deck),
         "cards": [dict(c) for c in cards]
     })
@@ -502,16 +545,12 @@ async def add_card_to_deck(
     name: str = Form(...),
     description: str = Form(...),
     rarity: str = Form(...),
-    height: str = Form(None),
-    diameter: str = Form(None),
-    thrust: str = Form(None),
-    payload_leo: str = Form(None),
-    reusability: str = Form(None),
     image_url: str = Form(None),
     user = Depends(require_admin)
 ):
-    """Add a card to a deck"""
+    """Add a card to a deck with template field values"""
     pool = await get_db_pool()
+    form_data = await request.form()
     
     async with pool.acquire() as conn:
         # Verify deck ownership
@@ -526,14 +565,33 @@ async def add_card_to_deck(
         if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
             raise HTTPException(status_code=403, detail="You don't own this deck")
         
-        # Insert card
-        await conn.execute(
-            """INSERT INTO cards (deck_id, name, description, rarity, image_url, created_by,
-                                  height, diameter, thrust, payload_leo, reusability)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)""",
-            deck_id, name, description, rarity, image_url, user['id'],
-            height, diameter, thrust, payload_leo, reusability
+        # Insert card with basic fields only
+        card = await conn.fetchrow(
+            """INSERT INTO cards (deck_id, name, description, rarity, image_url, created_by)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               RETURNING card_id""",
+            deck_id, name, description, rarity, image_url, user['id']
         )
+        
+        # Get template fields for this deck
+        template_fields = await conn.fetch(
+            "SELECT template_id FROM card_templates WHERE deck_id = $1",
+            deck_id
+        )
+        
+        # Insert template field values
+        for template_field in template_fields:
+            template_id = template_field['template_id']
+            field_key = f"template_field_{template_id}"
+            
+            if field_key in form_data:
+                field_value = form_data.get(field_key)
+                if field_value:  # Only insert non-empty values
+                    await conn.execute(
+                        """INSERT INTO card_template_fields (card_id, template_id, field_value)
+                           VALUES ($1, $2, $3)""",
+                        card['card_id'], template_id, field_value
+                    )
     
     return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
 
@@ -564,6 +622,66 @@ async def delete_card_from_deck(
         await conn.execute(
             "DELETE FROM cards WHERE card_id = $1 AND deck_id = $2",
             card_id, deck_id
+        )
+    
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
+@app.get("/deck/{deck_id}/cooldown", response_class=HTMLResponse)
+async def edit_cooldown(request: Request, deck_id: int, user = Depends(require_admin)):
+    """Show cooldown editor"""
+    pool = await get_db_pool()
+    
+    async with pool.acquire() as conn:
+        # Get deck info
+        deck = await conn.fetchrow(
+            "SELECT * FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        # Check permissions
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+    
+    return templates.TemplateResponse("edit_cooldown.html", {
+        "request": request,
+        "user": user,
+        "deck": dict(deck)
+    })
+
+@app.post("/deck/{deck_id}/cooldown/update")
+async def update_cooldown(
+    request: Request,
+    deck_id: int,
+    free_pack_cooldown_hours: int = Form(...),
+    user = Depends(require_admin)
+):
+    """Update deck cooldown"""
+    # Validate cooldown
+    if free_pack_cooldown_hours < 1 or free_pack_cooldown_hours > 168:
+        raise HTTPException(status_code=400, detail="Cooldown must be between 1 and 168 hours")
+    
+    pool = await get_db_pool()
+    
+    async with pool.acquire() as conn:
+        # Verify deck ownership
+        deck = await conn.fetchrow(
+            "SELECT created_by FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Update cooldown
+        await conn.execute(
+            "UPDATE decks SET free_pack_cooldown_hours = $1 WHERE deck_id = $2",
+            free_pack_cooldown_hours, deck_id
         )
     
     return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)

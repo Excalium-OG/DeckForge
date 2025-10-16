@@ -7,6 +7,7 @@
     <div class="deck-header">
         <h2>{{ deck.name }}</h2>
         <div class="header-actions">
+            <a href="/deck/{{ deck.deck_id }}/cooldown" class="btn btn-secondary">Edit Cooldown</a>
             <a href="/deck/{{ deck.deck_id }}/rarity" class="btn btn-secondary">Edit Drop Rates</a>
             <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
         </div>
@@ -38,51 +39,53 @@
             <div class="form-group">
                 <label for="description">Description *</label>
                 <textarea id="description" name="description" required rows="3" 
-                          placeholder="Brief description of the rocket"></textarea>
+                          placeholder="Brief description of the card"></textarea>
             </div>
             
+            {% if template_fields %}
+            <!-- Dynamic template fields -->
+            <h4>Card Details</h4>
             <div class="form-row">
+                {% for field in template_fields %}
                 <div class="form-group">
-                    <label for="height">Height</label>
-                    <input type="text" id="height" name="height" placeholder="e.g., 70m">
+                    <label for="field_{{ field.template_id }}">
+                        {{ field.field_name }}
+                        {% if field.is_required %}*{% endif %}
+                    </label>
+                    
+                    {% if field.field_type == 'text' %}
+                        <input type="text" 
+                               id="field_{{ field.template_id }}" 
+                               name="template_field_{{ field.template_id }}"
+                               {% if field.is_required %}required{% endif %}>
+                    {% elif field.field_type == 'number' %}
+                        <input type="number" 
+                               id="field_{{ field.template_id }}" 
+                               name="template_field_{{ field.template_id }}"
+                               {% if field.is_required %}required{% endif %}>
+                    {% elif field.field_type == 'dropdown' %}
+                        <select id="field_{{ field.template_id }}" 
+                                name="template_field_{{ field.template_id }}"
+                                {% if field.is_required %}required{% endif %}>
+                            <option value="">Select...</option>
+                            {% for option in field.dropdown_options.split(',') if field.dropdown_options %}
+                            <option value="{{ option.strip() }}">{{ option.strip() }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endif %}
                 </div>
-                
-                <div class="form-group">
-                    <label for="diameter">Diameter</label>
-                    <input type="text" id="diameter" name="diameter" placeholder="e.g., 3.7m">
-                </div>
-                
-                <div class="form-group">
-                    <label for="thrust">Thrust</label>
-                    <input type="text" id="thrust" name="thrust" placeholder="e.g., 7,607 kN">
-                </div>
+                {% endfor %}
             </div>
+            {% endif %}
             
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="payload_leo">Payload to LEO</label>
-                    <input type="text" id="payload_leo" name="payload_leo" placeholder="e.g., 22,800 kg">
-                </div>
-                
-                <div class="form-group">
-                    <label for="reusability">Reusability</label>
-                    <select id="reusability" name="reusability">
-                        <option value="">Select...</option>
-                        <option value="Expendable">Expendable</option>
-                        <option value="Partially Reusable">Partially Reusable</option>
-                        <option value="Fully Reusable">Fully Reusable</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="image">Card Image</label>
-                    <input type="file" id="image" accept="image/*" style="display: none;">
-                    <input type="hidden" id="image_url" name="image_url">
-                    <div class="image-upload-container">
-                        <button type="button" id="upload-btn" class="btn btn-secondary">Choose Image</button>
-                        <span id="upload-status">No file chosen</span>
-                        <div id="image-preview"></div>
-                    </div>
+            <div class="form-group">
+                <label for="image">Card Image</label>
+                <input type="file" id="image" accept="image/*" style="display: none;">
+                <input type="hidden" id="image_url" name="image_url">
+                <div class="image-upload-container">
+                    <button type="button" id="upload-btn" class="btn btn-secondary">Choose Image</button>
+                    <span id="upload-status">No file chosen</span>
+                    <div id="image-preview"></div>
                 </div>
             </div>
             
