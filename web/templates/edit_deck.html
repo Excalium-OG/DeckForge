@@ -75,14 +75,95 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="image_url">Image URL</label>
-                    <input type="url" id="image_url" name="image_url" placeholder="https://...">
+                    <label for="image">Card Image</label>
+                    <input type="file" id="image" accept="image/*" style="display: none;">
+                    <input type="hidden" id="image_url" name="image_url">
+                    <div class="image-upload-container">
+                        <button type="button" id="upload-btn" class="btn btn-secondary">Choose Image</button>
+                        <span id="upload-status">No file chosen</span>
+                        <div id="image-preview"></div>
+                    </div>
                 </div>
             </div>
             
             <button type="submit" class="btn btn-primary">Add Card</button>
         </form>
     </div>
+    
+    <script>
+    // Image upload functionality
+    const fileInput = document.getElementById('image');
+    const uploadBtn = document.getElementById('upload-btn');
+    const uploadStatus = document.getElementById('upload-status');
+    const imageUrlInput = document.getElementById('image_url');
+    const imagePreview = document.getElementById('image-preview');
+    
+    uploadBtn.addEventListener('click', () => {
+        fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            imagePreview.innerHTML = `<img src="${e.target.result}" style="max-width: 200px; max-height: 200px; margin-top: 10px; border-radius: 4px;">`;
+        };
+        reader.readAsDataURL(file);
+        
+        uploadStatus.textContent = 'Uploading...';
+        uploadBtn.disabled = true;
+        
+        try {
+            // Get file extension
+            const extension = '.' + file.name.split('.').pop();
+            
+            // Get presigned upload URL
+            const urlResponse = await fetch(`/api/images/upload-url?extension=${encodeURIComponent(extension)}`, {
+                method: 'POST'
+            });
+            const { uploadUrl } = await urlResponse.json();
+            
+            // Upload file directly to object storage
+            const uploadResponse = await fetch(uploadUrl, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                    'Content-Type': file.type
+                }
+            });
+            
+            if (!uploadResponse.ok) {
+                throw new Error('Upload failed');
+            }
+            
+            // Confirm upload and get image path
+            const formData = new FormData();
+            formData.append('upload_url', uploadUrl.split('?')[0]); // Remove query params
+            
+            const confirmResponse = await fetch('/api/images/confirm', {
+                method: 'POST',
+                body: formData
+            });
+            const { imagePath } = await confirmResponse.json();
+            
+            // Set the image path in hidden input
+            imageUrlInput.value = imagePath;
+            uploadStatus.textContent = `✓ ${file.name}`;
+            uploadStatus.style.color = 'green';
+            
+        } catch (error) {
+            console.error('Upload error:', error);
+            uploadStatus.textContent = '✗ Upload failed';
+            uploadStatus.style.color = 'red';
+            imagePreview.innerHTML = '';
+        } finally {
+            uploadBtn.disabled = false;
+        }
+    });
+    </script>
     
     <div class="section">
         <h3>Cards in Deck ({{ cards|length }})</h3>

@@ -31,9 +31,15 @@ Preferred communication style: Simple, everyday language.
 - **Dashboard**: Displays user info, managed Discord servers, assigned decks, and user-created decks.
 - **Deck Management**: Allows creation, editing (adding/deleting cards with detailed specifications), and viewing of cards within a deck.
 - **Rarity Rate Editor**: Configurable drop rates per rarity tier for decks, with real-time validation to ensure rates sum to 100%.
+- **Image Upload**: Direct file upload from client device using Replit object storage with presigned URLs for secure, scalable image hosting.
 
 ### Image & Asset Management
-- Card images are stored as URLs in the database. Admin commands support image uploads via Discord attachments.
+- **Web Portal**: Card images uploaded via web admin portal are stored in Replit object storage. The system uses:
+  - Direct client-to-storage uploads via presigned URLs (no server intermediary)
+  - Google Cloud Storage with Replit sidecar authentication
+  - Image paths stored in database format: `/images/card-images/{uuid}`
+  - Automatic content-type detection and caching for optimal performance
+- **Discord Bot**: Admin commands support image uploads via Discord attachments, stored as URLs in the database.
 
 ### Command Design Patterns
 - **Help System**: Custom help command filters admin-only commands for non-admin users.

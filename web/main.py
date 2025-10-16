@@ -2,7 +2,7 @@ import os
 import asyncpg
 import secrets
 from fastapi import FastAPI, Request, Depends, HTTPException, Form, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from authlib.integrations.starlette_client import OAuth
@@ -10,6 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import httpx
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
+from web.object_storage import ObjectStorageService
 
 # Initialize FastAPI app
 app = FastAPI(title="DeckForge Admin Portal")
@@ -363,6 +364,56 @@ async def assign_deck_to_server(
             )
     
     return RedirectResponse(url="/dashboard", status_code=303)
+
+@app.post("/api/images/upload-url")
+async def get_image_upload_url(request: Request, user = Depends(require_admin)):
+    """Get a presigned URL for uploading an image"""
+    file_extension = request.query_params.get("extension", "")
+    
+    storage = ObjectStorageService()
+    upload_url = await storage.get_upload_url(file_extension)
+    
+    return {"uploadUrl": upload_url}
+
+@app.post("/api/images/confirm")
+async def confirm_image_upload(
+    request: Request,
+    upload_url: str = Form(...),
+    user = Depends(require_admin)
+):
+    """Confirm image upload and return the image path for database storage"""
+    storage = ObjectStorageService()
+    image_path = storage.get_image_path(upload_url)
+    
+    return {"imagePath": image_path}
+
+@app.get("/images/card-images/{image_id:path}")
+async def serve_card_image(image_id: str):
+    """Serve uploaded card images from object storage"""
+    storage = ObjectStorageService()
+    image_path = f"/images/card-images/{image_id}"
+    
+    blob = await storage.get_image_blob(image_path)
+    if not blob:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Stream the image
+    content = blob.download_as_bytes()
+    
+    # Determine content type
+    content_type = "image/jpeg"
+    if image_id.lower().endswith(".png"):
+        content_type = "image/png"
+    elif image_id.lower().endswith(".gif"):
+        content_type = "image/gif"
+    elif image_id.lower().endswith(".webp"):
+        content_type = "image/webp"
+    
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=31536000"}  # Cache for 1 year
+    )
 
 @app.get("/deck/create", response_class=HTMLResponse)
 async def create_deck_form(request: Request, user = Depends(require_admin)):
