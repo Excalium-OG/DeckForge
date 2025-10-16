@@ -18,7 +18,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Data Layer
 - **Database**: PostgreSQL is used for all persistent storage, managed with `asyncpg` for asynchronous operations and connection pooling.
-- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, and `rarity_ranges`. `user_cards` uses UUIDs for unique instance tracking.
+- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, `rarity_ranges`, `card_templates`, `card_template_fields`, and `server_settings`. `user_cards` uses UUIDs for unique instance tracking.
+- **Custom Card Templates**: The `card_templates` table stores custom field definitions per deck (field name, type, required flag, display order), while `card_template_fields` stores actual field values for each card. Supports text, number, and dropdown field types.
+- **Server Settings**: The `server_settings` table stores per-server configurations including active deck assignments and customizations.
 
 ### Core Game Mechanics
 - **Pack System**: Three pack types (Normal, Booster, Booster+). Users can claim a free Normal Pack every 8 hours or purchase packs with credits. Packs have a 30-item inventory limit, and Booster Packs apply rarity multipliers.
@@ -32,6 +34,8 @@ Preferred communication style: Simple, everyday language.
 - **Deck Management**: Allows creation, editing (adding/deleting cards with detailed specifications), and viewing of cards within a deck.
 - **Rarity Rate Editor**: Configurable drop rates per rarity tier for decks, with real-time validation to ensure rates sum to 100%.
 - **Image Upload**: Direct file upload from client device using Replit object storage with presigned URLs for secure, scalable image hosting.
+- **Custom Card Templates**: Define custom field schemas for each deck with field name, type (text/number/dropdown), required flag, and display order. Card creation forms dynamically adapt to the deck's template.
+- **Free Pack Cooldown Editor**: Configurable 1-168 hour cooldowns per deck for free pack claims, allowing deck creators to customize pack distribution rates.
 
 ### Image & Asset Management
 - **Web Portal**: Card images uploaded via web admin portal are stored in Replit object storage. The system uses:
