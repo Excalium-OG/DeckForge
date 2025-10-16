@@ -109,7 +109,7 @@ async def get_user_managed_guilds(access_token: str) -> List[Dict]:
 # Dependency: Require authentication
 async def require_auth(request: Request):
     """Dependency to require authentication"""
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
