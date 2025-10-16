@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Create Deck - DeckForge Admin{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>Create New Deck</h2>
+    
+    <form method="POST" action="/deck/create" class="deck-form">
+        <div class="form-group">
+            <label for="name">Deck Name *</label>
+            <input type="text" id="name" name="name" required 
+                   placeholder="e.g., Rocket Collection 2025" maxlength="100">
+        </div>
+        
+        <div class="form-info">
+            <h4>What happens next?</h4>
+            <ul>
+                <li>Deck will be created with default rarity rates (7-tier system)</li>
+                <li>You can add cards to the deck</li>
+                <li>You can customize rarity drop rates</li>
+                <li>You can assign this deck to your Discord servers</li>
+            </ul>
+        </div>
+        
+        <div class="form-actions">
+            <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Create Deck</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

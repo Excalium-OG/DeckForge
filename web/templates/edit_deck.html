@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Deck - {{ deck.name }}{% endblock %}
+
+{% block content %}
+<div class="edit-deck-container">
+    <div class="deck-header">
+        <h2>{{ deck.name }}</h2>
+        <div class="header-actions">
+            <a href="/deck/{{ deck.deck_id }}/rarity" class="btn btn-secondary">Edit Drop Rates</a>
+            <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h3>Add New Card</h3>
+        <form method="POST" action="/deck/{{ deck.deck_id }}/card/add" class="card-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="name">Card Name *</label>
+                    <input type="text" id="name" name="name" required placeholder="e.g., Falcon 9">
+                </div>
+                
+                <div class="form-group">
+                    <label for="rarity">Rarity *</label>
+                    <select id="rarity" name="rarity" required>
+                        <option value="Common">Common</option>
+                        <option value="Uncommon">Uncommon</option>
+                        <option value="Exceptional">Exceptional</option>
+                        <option value="Rare">Rare</option>
+                        <option value="Epic">Epic</option>
+                        <option value="Legendary">Legendary</option>
+                        <option value="Mythic">Mythic</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description *</label>
+                <textarea id="description" name="description" required rows="3" 
+                          placeholder="Brief description of the rocket"></textarea>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="height">Height</label>
+                    <input type="text" id="height" name="height" placeholder="e.g., 70m">
+                </div>
+                
+                <div class="form-group">
+                    <label for="diameter">Diameter</label>
+                    <input type="text" id="diameter" name="diameter" placeholder="e.g., 3.7m">
+                </div>
+                
+                <div class="form-group">
+                    <label for="thrust">Thrust</label>
+                    <input type="text" id="thrust" name="thrust" placeholder="e.g., 7,607 kN">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="payload_leo">Payload to LEO</label>
+                    <input type="text" id="payload_leo" name="payload_leo" placeholder="e.g., 22,800 kg">
+                </div>
+                
+                <div class="form-group">
+                    <label for="reusability">Reusability</label>
+                    <select id="reusability" name="reusability">
+                        <option value="">Select...</option>
+                        <option value="Expendable">Expendable</option>
+                        <option value="Partially Reusable">Partially Reusable</option>
+                        <option value="Fully Reusable">Fully Reusable</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="image_url">Image URL</label>
+                    <input type="url" id="image_url" name="image_url" placeholder="https://...">
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Add Card</button>
+        </form>
+    </div>
+    
+    <div class="section">
+        <h3>Cards in Deck ({{ cards|length }})</h3>
+        {% if cards %}
+        <div class="cards-list">
+            {% for card in cards %}
+            <div class="card-item">
+                <div class="card-preview">
+                    {% if card.image_url %}
+                    <img src="{{ card.image_url }}" alt="{{ card.name }}" class="card-thumbnail">
+                    {% else %}
+                    <div class="card-thumbnail-placeholder">🚀</div>
+                    {% endif %}
+                    <div class="card-details">
+                        <h4>{{ card.name }} <span class="card-rarity-badge">{{ card.rarity }}</span></h4>
+                        <p class="card-description">{{ card.description[:100] }}{% if card.description|length > 100 %}...{% endif %}</p>
+                        {% if card.height or card.diameter or card.thrust %}
+                        <div class="card-specs">
+                            {% if card.height %}<span>H: {{ card.height }}</span>{% endif %}
+                            {% if card.diameter %}<span>D: {{ card.diameter }}</span>{% endif %}
+                            {% if card.thrust %}<span>T: {{ card.thrust }}</span>{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <form method="POST" action="/deck/{{ deck.deck_id }}/card/{{ card.card_id }}/delete" 
+                      onsubmit="return confirm('Delete {{ card.name }}?');">
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-state">No cards in this deck yet. Add your first card above!</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

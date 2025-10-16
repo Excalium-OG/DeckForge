@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}DeckForge Admin Portal{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="logo">🚀 DeckForge Admin</h1>
+            {% if user %}
+            <div class="nav-user">
+                <span>{{ user.username }}#{{ user.discriminator }}</span>
+                <a href="/logout" class="btn btn-secondary">Logout</a>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; 2025 DeckForge | Collectible Rocket Trading Cards</p>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

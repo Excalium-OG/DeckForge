@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Rarity Rates - {{ deck.name }}{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <div class="deck-header">
+        <h2>{{ deck.name }} - Rarity Drop Rates</h2>
+        <a href="/deck/{{ deck.deck_id }}/edit" class="btn btn-secondary">Back to Deck</a>
+    </div>
+    
+    {% if request.query_params.get('success') == '1' %}
+    <div class="alert alert-success">
+        ✅ Rarity rates updated successfully!
+    </div>
+    {% endif %}
+    
+    <form method="POST" action="/deck/{{ deck.deck_id }}/rarity/update" class="rarity-form" id="rarityForm">
+        <div class="rarity-info">
+            <p><strong>Configure drop rates for each rarity tier. Total must equal 100%.</strong></p>
+            <p class="total-display">Current Total: <span id="totalRate">0</span>%</p>
+        </div>
+        
+        <div class="rarity-inputs">
+            {% for rate in rates %}
+            <div class="form-group">
+                <label for="rate_{{ rate.rarity }}">{{ rate.rarity }}</label>
+                <div class="input-with-suffix">
+                    <input type="number" 
+                           id="rate_{{ rate.rarity }}" 
+                           name="rate_{{ rate.rarity }}" 
+                           value="{{ rate.drop_rate }}" 
+                           min="0" 
+                           max="100" 
+                           step="0.1" 
+                           required
+                           class="rate-input">
+                    <span class="suffix">%</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="form-actions">
+            <a href="/deck/{{ deck.deck_id }}/edit" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary" id="submitBtn">Save Rates</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Calculate and display total rate
+    function updateTotal() {
+        const inputs = document.querySelectorAll('.rate-input');
+        let total = 0;
+        inputs.forEach(input => {
+            total += parseFloat(input.value) || 0;
+        });
+        const totalDisplay = document.getElementById('totalRate');
+        totalDisplay.textContent = total.toFixed(1);
+        
+        // Visual feedback
+        const submitBtn = document.getElementById('submitBtn');
+        if (Math.abs(total - 100) < 0.01) {
+            totalDisplay.style.color = '#10b981';
+            submitBtn.disabled = false;
+        } else {
+            totalDisplay.style.color = '#ef4444';
+            submitBtn.disabled = true;
+        }
+    }
+    
+    // Add event listeners to all inputs
+    document.querySelectorAll('.rate-input').forEach(input => {
+        input.addEventListener('input', updateTotal);
+    });
+    
+    // Initial calculation
+    updateTotal();
+    
+    // Validate on submit
+    document.getElementById('rarityForm').addEventListener('submit', function(e) {
+        const inputs = document.querySelectorAll('.rate-input');
+        let total = 0;
+        inputs.forEach(input => {
+            total += parseFloat(input.value) || 0;
+        });
+        
+        if (Math.abs(total - 100) > 0.01) {
+            e.preventDefault();
+            alert('Rates must total exactly 100%. Current total: ' + total.toFixed(1) + '%');
+        }
+    });
+</script>
+{% endblock %}

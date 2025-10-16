@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - DeckForge Admin{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h2>Dashboard</h2>
+        <a href="/deck/create" class="btn btn-primary">+ Create New Deck</a>
+    </div>
+
+    {% if is_global_admin %}
+    <div class="alert alert-info">
+        <strong>🛡️ Global Admin</strong> - You have full access to all decks and servers
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <h3>📋 Your Decks</h3>
+        {% if decks %}
+        <div class="deck-grid">
+            {% for deck in decks %}
+            <div class="deck-card">
+                <h4>{{ deck.name }}</h4>
+                <p class="deck-meta">Created: {{ deck.created_at.strftime('%Y-%m-%d') if deck.created_at else 'Unknown' }}</p>
+                <div class="deck-actions">
+                    <a href="/deck/{{ deck.deck_id }}/edit" class="btn btn-sm btn-secondary">Edit Cards</a>
+                    <a href="/deck/{{ deck.deck_id }}/rarity" class="btn btn-sm btn-secondary">Edit Rates</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-state">No decks created yet. Create your first deck to get started!</p>
+        {% endif %}
+    </div>
+
+    <div class="section">
+        <h3>🎮 Your Discord Servers</h3>
+        {% if guilds %}
+        <div class="server-list">
+            {% for guild in guilds %}
+            <div class="server-item">
+                <div class="server-info">
+                    {% if guild.icon %}
+                    <img src="https://cdn.discordapp.com/icons/{{ guild.id }}/{{ guild.icon }}.png" 
+                         alt="{{ guild.name }}" class="server-icon">
+                    {% else %}
+                    <div class="server-icon-placeholder">{{ guild.name[0] }}</div>
+                    {% endif %}
+                    <div>
+                        <strong>{{ guild.name }}</strong>
+                        {% if guild.deck_id %}
+                        <p class="deck-assigned">
+                            Deck assigned: 
+                            {% for deck in decks %}
+                                {% if deck.deck_id == guild.deck_id %}{{ deck.name }}{% endif %}
+                            {% endfor %}
+                        </p>
+                        {% else %}
+                        <p class="no-deck">No deck assigned</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <form method="POST" action="/server/{{ guild.id }}/assign-deck" class="assign-form">
+                    <select name="deck_id" class="deck-select">
+                        <option value="">No Deck</option>
+                        {% for deck in decks %}
+                        <option value="{{ deck.deck_id }}" {% if guild.deck_id == deck.deck_id %}selected{% endif %}>
+                            {{ deck.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-primary">Assign</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-state">No managed servers found. You need MANAGE_SERVER permission to use this portal.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
