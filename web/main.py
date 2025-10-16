@@ -1,6 +1,7 @@
 import os
 import asyncpg
-from fastapi import FastAPI, Request, Depends, HTTPException, Form
+import secrets
+from fastapi import FastAPI, Request, Depends, HTTPException, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -8,7 +9,7 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
 import httpx
 from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Initialize FastAPI app
 app = FastAPI(title="DeckForge Admin Portal")
@@ -55,10 +56,28 @@ async def get_db_pool():
         )
     return db_pool
 
-# Helper: Get current user from session
-def get_current_user(request: Request) -> Optional[Dict]:
+# Helper: Get current user from session cookie + database
+async def get_current_user(request: Request) -> Optional[Dict]:
     """Get current authenticated user from session"""
-    return request.session.get('user')
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        return None
+    
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT * FROM user_sessions WHERE session_id = $1 AND expires_at > NOW()",
+            session_id
+        )
+        if session:
+            return {
+                'id': session['user_id'],
+                'username': session['username'],
+                'discriminator': session['discriminator'],
+                'avatar': session['avatar'],
+                'access_token': session['access_token']
+            }
+    return None
 
 # Helper: Check if user is global admin
 def is_global_admin(user_id: int) -> bool:
@@ -121,48 +140,141 @@ async def shutdown():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Home page / login page"""
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if user:
         return RedirectResponse(url="/dashboard")
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.get("/login")
 async def login(request: Request):
-    """Initiate Discord OAuth2 login"""
-    redirect_uri = request.url_for('auth_callback')
-    return await oauth.discord.authorize_redirect(request, redirect_uri)
+    """Initiate Discord OAuth2 login with database-backed state"""
+    # Generate a unique state token
+    state = secrets.token_urlsafe(32)
+    
+    # Store state in database
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO oauth_states (state) VALUES ($1)",
+            state
+        )
+    
+    # Build Discord OAuth URL with our state
+    redirect_uri = os.getenv('DISCORD_REDIRECT_URI')
+    client_id = os.getenv('DISCORD_CLIENT_ID')
+    oauth_url = (
+        f"https://discord.com/api/oauth2/authorize"
+        f"?client_id={client_id}"
+        f"&redirect_uri={redirect_uri}"
+        f"&response_type=code"
+        f"&scope=identify%20guilds"
+        f"&state={state}"
+    )
+    
+    return RedirectResponse(url=oauth_url)
 
 @app.get("/auth/callback")
 async def auth_callback(request: Request):
-    """OAuth2 callback handler"""
+    """OAuth2 callback handler with database-backed state verification"""
     try:
-        token = await oauth.discord.authorize_access_token(request)
+        # Get state and code from query params
+        state = request.query_params.get('state')
+        code = request.query_params.get('code')
         
-        # Fetch user info
+        if not state or not code:
+            return RedirectResponse(url="/?error=auth_failed")
+        
+        # Verify state from database
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            state_record = await conn.fetchrow(
+                "SELECT * FROM oauth_states WHERE state = $1 AND expires_at > NOW()",
+                state
+            )
+            
+            if not state_record:
+                print("OAuth error: Invalid or expired state")
+                return RedirectResponse(url="/?error=auth_failed")
+            
+            # Delete used state
+            await conn.execute("DELETE FROM oauth_states WHERE state = $1", state)
+        
+        # Exchange code for token
         async with httpx.AsyncClient() as client:
-            headers = {'Authorization': f'Bearer {token["access_token"]}'}
+            token_response = await client.post(
+                'https://discord.com/api/oauth2/token',
+                data={
+                    'client_id': os.getenv('DISCORD_CLIENT_ID'),
+                    'client_secret': os.getenv('DISCORD_CLIENT_SECRET'),
+                    'grant_type': 'authorization_code',
+                    'code': code,
+                    'redirect_uri': os.getenv('DISCORD_REDIRECT_URI'),
+                },
+                headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            )
+            
+            if token_response.status_code != 200:
+                print(f"Token exchange failed: {token_response.text}")
+                return RedirectResponse(url="/?error=auth_failed")
+            
+            token_data = token_response.json()
+            access_token = token_data['access_token']
+            
+            # Fetch user info
+            headers = {'Authorization': f'Bearer {access_token}'}
             user_response = await client.get('https://discord.com/api/users/@me', headers=headers)
+            
+            if user_response.status_code != 200:
+                print(f"User fetch failed: {user_response.text}")
+                return RedirectResponse(url="/?error=auth_failed")
+            
             user_data = user_response.json()
         
-        # Store user in session
-        request.session['user'] = {
-            'id': int(user_data['id']),
-            'username': user_data['username'],
-            'discriminator': user_data.get('discriminator', '0'),
-            'avatar': user_data.get('avatar'),
-            'access_token': token['access_token']
-        }
+        # Create session in database
+        session_id = secrets.token_urlsafe(32)
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO user_sessions 
+                   (session_id, user_id, username, discriminator, avatar, access_token)
+                   VALUES ($1, $2, $3, $4, $5, $6)""",
+                session_id,
+                int(user_data['id']),
+                user_data['username'],
+                user_data.get('discriminator', '0'),
+                user_data.get('avatar'),
+                access_token
+            )
         
-        return RedirectResponse(url="/dashboard")
+        # Set session cookie and redirect
+        response = RedirectResponse(url="/dashboard")
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            max_age=7*24*60*60,  # 7 days
+            httponly=True,
+            secure=True,
+            samesite="none"
+        )
+        return response
+        
     except Exception as e:
         print(f"OAuth error: {e}")
+        import traceback
+        traceback.print_exc()
         return RedirectResponse(url="/?error=auth_failed")
 
 @app.get("/logout")
 async def logout(request: Request):
     """Logout user"""
-    request.session.clear()
-    return RedirectResponse(url="/")
+    session_id = request.cookies.get('session_id')
+    if session_id:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            await conn.execute("DELETE FROM user_sessions WHERE session_id = $1", session_id)
+    
+    response = RedirectResponse(url="/")
+    response.delete_cookie(key="session_id")
+    return response
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, user = Depends(require_admin)):
