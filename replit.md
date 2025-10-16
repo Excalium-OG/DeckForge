@@ -4,7 +4,7 @@
 
 DeckForge is a Discord bot that implements a collectible rocket-themed trading card game. The bot enables users to collect cards through a time-gated drop system, view their collections, and interact with card information. The system is designed with a phased rollout approach, with Phase 1 focusing on core card collection mechanics and admin tools, while future phases will introduce gameplay mechanics, trading, and monetization features.
 
-**Status**: Phase 2 Extensions ✅ - Enhanced inventory UX, card recycling system, and player-to-player trading
+**Status**: Phase 2 Extensions ✅ - Enhanced inventory UX, card recycling system, and player-to-player trading (Bug fix: timezone-aware timestamps now properly supported)
 
 ## User Preferences
 

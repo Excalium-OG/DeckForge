@@ -7,11 +7,11 @@ CREATE TABLE IF NOT EXISTS trades (
     initiator_id BIGINT NOT NULL,
     responder_id BIGINT NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'accepted', 'completed', 'cancelled', 'expired')),
-    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    finalized_at TIMESTAMP,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    finalized_at TIMESTAMP WITH TIME ZONE,
     initiator_accepted BOOLEAN DEFAULT FALSE,
     responder_accepted BOOLEAN DEFAULT FALSE,
-    expires_at TIMESTAMP
+    expires_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS trade_items (
@@ -36,4 +36,4 @@ CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status);
 CREATE INDEX IF NOT EXISTS idx_trade_items_card ON trade_items(card_id);
 
 -- Add recycled_at timestamp to user_cards for recycling tracking
-ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS recycled_at TIMESTAMP;
+ALTER TABLE user_cards ADD COLUMN IF NOT EXISTS recycled_at TIMESTAMP WITH TIME ZONE;
