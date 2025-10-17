@@ -267,25 +267,42 @@ class CardCommands(commands.Cog):
     @commands.command(name='mycards')
     async def my_cards(self, ctx):
         """
-        List all owned cards with pagination. Shows grouped cards by rarity.
+        List all owned cards from this server's deck with pagination. Shows grouped cards by rarity.
         Usage: !mycards
         """
         user_id = ctx.author.id
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        # Check if server has an assigned deck
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
+        
+        deck_id = deck['deck_id']
+        deck_name = deck['name']
         
         async with self.db_pool.acquire() as conn:
-            # Get all user cards with card details
+            # Get all user cards with card details, filtered by server's deck
             cards = await conn.fetch(
                 """SELECT c.card_id, c.name, c.rarity, COUNT(*) as quantity
                    FROM user_cards uc
                    JOIN cards c ON uc.card_id = c.card_id
-                   WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
+                   WHERE uc.user_id = $1 AND uc.recycled_at IS NULL AND c.deck_id = $2
                    GROUP BY c.card_id, c.name, c.rarity
                    ORDER BY c.rarity, c.name""",
-                user_id
+                user_id, deck_id
             )
         
         if not cards:
-            await ctx.send("📦 You don't have any cards yet! Use `!claimfreepack` to get a pack, then `!drop` to open it.")
+            await ctx.send(f"📦 You don't have any cards from **{deck_name}** yet! Use `!claimfreepack` to get a pack, then `!drop` to open it.")
             return
         
         # Convert to list and sort by rarity hierarchy
@@ -311,7 +328,7 @@ class CardCommands(commands.Cog):
         # Create initial embed
         current_page = 0
         embed = discord.Embed(
-            title=f"🎴 {ctx.author.name}'s Card Collection",
+            title=f"🎴 {ctx.author.name}'s {deck_name} Collection",
             description=f"Total cards: {total_count} | Unique: {len(sorted_cards)}",
             color=discord.Color.green()
         )
@@ -349,7 +366,7 @@ class CardCommands(commands.Cog):
                     
                     # Update embed
                     embed = discord.Embed(
-                        title=f"🎴 {ctx.author.name}'s Card Collection",
+                        title=f"🎴 {ctx.author.name}'s {deck_name} Collection",
                         description=f"Total cards: {total_count} | Unique: {len(sorted_cards)}",
                         color=discord.Color.green()
                     )
