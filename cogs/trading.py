@@ -151,11 +151,26 @@ class TradingCommands(commands.Cog):
     @commands.command(name='requesttrade')
     async def request_trade(self, ctx, member: discord.Member):
         """
-        Initiate a trade with another user.
+        Initiate a trade with another user in this server.
         Usage: !requesttrade @user
         """
         initiator_id = ctx.author.id
         responder_id = member.id
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        # Must be in a server
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        # Check if server has an assigned deck
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
         
         # Can't trade with yourself
         if initiator_id == responder_id:
