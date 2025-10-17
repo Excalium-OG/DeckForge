@@ -386,11 +386,27 @@ class CardCommands(commands.Cog):
     @commands.command(name='recycle')
     async def recycle_cards(self, ctx, card_id: int, amount: int = 1):
         """
-        Recycle duplicate cards for credits.
+        Recycle duplicate cards from this server's deck for credits.
         Usage: !recycle [card_id] [amount]
         Example: !recycle 5 3 (recycles 3 copies of card ID 5)
         """
         user_id = ctx.author.id
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        # Check if server has an assigned deck
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
+        
+        deck_id = deck['deck_id']
         
         # Validate amount
         if amount < 1:
@@ -402,14 +418,22 @@ class CardCommands(commands.Cog):
             return
         
         async with self.db_pool.acquire() as conn:
-            # Get card info
+            # Get card info and verify it belongs to this server's deck
             card_info = await conn.fetchrow(
-                "SELECT name, rarity FROM cards WHERE card_id = $1",
+                "SELECT name, rarity, deck_id FROM cards WHERE card_id = $1",
                 card_id
             )
             
             if not card_info:
                 await ctx.send(f"❌ Card ID `{card_id}` does not exist!")
+                return
+            
+            # Verify card belongs to this server's deck
+            if card_info['deck_id'] != deck_id:
+                await ctx.send(
+                    f"❌ Card **{card_info['name']}** is not part of this server's deck!\n"
+                    f"You can only recycle cards from **{deck['name']}** in this server."
+                )
                 return
             
             # Check how many of this card the user owns
