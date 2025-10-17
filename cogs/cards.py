@@ -528,58 +528,6 @@ class CardCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='addcard')
-    async def add_card(self, ctx, rarity: str, name: str, *, description: str = ""):
-        """
-        [ADMIN] Add a new card to the database with image.
-        Usage: !addcard [rarity] [name_with_underscores] [description_with_underscores]
-        Requires: Image attachment
-        """
-        # Check admin permission
-        if not self.is_admin(ctx.author.id):
-            await ctx.send("❌ This command is admin-only!")
-            return
-        
-        # Validate rarity
-        rarity = rarity.capitalize()
-        if not validate_rarity(rarity):
-            await ctx.send(
-                f"❌ Invalid rarity! Must be one of: {', '.join(RARITY_HIERARCHY)}"
-            )
-            return
-        
-        # Validate image attachment
-        image_url = validate_image_attachment(ctx.message)
-        if not image_url:
-            await ctx.send("❌ You must attach an image when creating a card!")
-            return
-        
-        # Replace underscores with spaces in name and description
-        name = name.replace('_', ' ')
-        description = description.replace('_', '\n')
-        
-        async with self.db_pool.acquire() as conn:
-            # Insert card
-            card_id = await conn.fetchval(
-                """INSERT INTO cards (name, rarity, description, image_url, created_by)
-                   VALUES ($1, $2, $3, $4, $5)
-                   RETURNING card_id""",
-                name, rarity, description, image_url, ctx.author.id
-            )
-        
-        # Confirmation embed
-        embed = discord.Embed(
-            title="✅ Card Created!",
-            description=f"**{name}** has been added to the collection.",
-            color=discord.Color.green()
-        )
-        embed.add_field(name="Card ID", value=str(card_id), inline=True)
-        embed.add_field(name="Rarity", value=rarity, inline=True)
-        embed.add_field(name="Description", value=description or "None", inline=False)
-        embed.set_image(url=image_url)
-        
-        await ctx.send(embed=embed)
-    
     @commands.command(name='viewdroprates')
     async def view_drop_rates(self, ctx):
         """
