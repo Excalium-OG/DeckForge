@@ -1,4 +1,5 @@
 import os
+import asyncio
 import asyncpg
 import secrets
 from fastapi import FastAPI, Request, Depends, HTTPException, Form, Response
@@ -92,22 +93,35 @@ def is_global_admin(user_id: int) -> bool:
 # Helper: Get user's managed guilds from Discord API
 async def get_user_managed_guilds(access_token: str) -> List[Dict]:
     """Fetch guilds where user has MANAGE_SERVER permission"""
+    if not access_token:
+        return []
+    
     async with httpx.AsyncClient() as client:
         headers = {'Authorization': f'Bearer {access_token}'}
-        response = await client.get('https://discord.com/api/users/@me/guilds', headers=headers)
         
-        if response.status_code != 200:
-            print(f"Discord API error: {response.status_code} - {response.text}")
+        try:
+            response = await client.get('https://discord.com/api/users/@me/guilds', headers=headers, timeout=10.0)
+            
+            if response.status_code == 429:
+                # Rate limited - wait and retry once
+                retry_after = response.json().get('retry_after', 1)
+                await asyncio.sleep(retry_after)
+                response = await client.get('https://discord.com/api/users/@me/guilds', headers=headers, timeout=10.0)
+            
+            if response.status_code != 200:
+                print(f"Discord API error: {response.status_code} - {response.text}")
+                return []
+            
+            guilds = response.json()
+            # Filter for guilds where user has MANAGE_GUILD permission (0x20)
+            managed_guilds = [
+                guild for guild in guilds
+                if int(guild.get('permissions', 0)) & 0x20
+            ]
+            return managed_guilds
+        except Exception as e:
+            print(f"Error fetching guilds: {e}")
             return []
-        
-        guilds = response.json()
-        # Filter for guilds where user has MANAGE_GUILD permission (0x20)
-        managed_guilds = [
-            guild for guild in guilds
-            if int(guild.get('permissions', 0)) & 0x20
-        ]
-        print(f"User managed guilds: {len(managed_guilds)} found")
-        return managed_guilds
 
 # Dependency: Require authentication
 async def require_auth(request: Request):
