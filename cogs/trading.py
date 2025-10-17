@@ -532,6 +532,23 @@ class TradingCommands(commands.Cog):
         Usage: !finalize
         """
         user_id = ctx.author.id
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        # Must be in a server
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        # Check if server has an assigned deck
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
+        
+        deck_id = deck['deck_id']
         
         async with self.db_pool.acquire() as conn:
             trade = await self.get_active_trade(conn, user_id)
@@ -559,6 +576,20 @@ class TradingCommands(commands.Cog):
             # Get items from both sides
             initiator_items = await self.get_trade_items(conn, str(trade_id), trade['initiator_id'])
             responder_items = await self.get_trade_items(conn, str(trade_id), trade['responder_id'])
+            
+            # Verify all cards belong to this server's deck
+            all_items = initiator_items + responder_items
+            for item in all_items:
+                card_deck = await conn.fetchval(
+                    "SELECT deck_id FROM cards WHERE card_id = $1",
+                    item['card_id']
+                )
+                if card_deck != deck_id:
+                    await ctx.send(
+                        f"❌ Trade failed! Card **{item['name']}** is not part of this server's deck!\n"
+                        f"All cards must be from **{deck['name']}** to complete this trade."
+                    )
+                    return
             
             # Execute trade in a transaction
             async with conn.transaction():
