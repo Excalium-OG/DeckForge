@@ -105,52 +105,6 @@ class FutureCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='updateimage')
-    async def update_image(self, ctx, card_id: int):
-        """
-        [ADMIN] Update a card's image.
-        Usage: !updateimage [card_id]
-        Requires: Image attachment
-        """
-        # Check admin permission
-        if not self.is_admin(ctx.author.id):
-            await ctx.send("❌ This command is admin-only!")
-            return
-        
-        # Validate image attachment
-        from utils.card_helpers import validate_image_attachment
-        image_url = validate_image_attachment(ctx.message)
-        
-        if not image_url:
-            await ctx.send("❌ You must attach an image!")
-            return
-        
-        async with self.db_pool.acquire() as conn:
-            # Check if card exists
-            card = await conn.fetchrow(
-                "SELECT card_id, name FROM cards WHERE card_id = $1",
-                card_id
-            )
-            
-            if not card:
-                await ctx.send(f"❌ Card ID {card_id} not found!")
-                return
-            
-            # Update image
-            await conn.execute(
-                "UPDATE cards SET image_url = $1 WHERE card_id = $2",
-                image_url, card_id
-            )
-        
-        embed = discord.Embed(
-            title="🖼️ Image Updated!",
-            description=f"**{card['name']}** now has a new image.",
-            color=discord.Color.green()
-        )
-        embed.set_image(url=image_url)
-        
-        await ctx.send(embed=embed)
-    
     @commands.command(name='balance')
     async def check_balance(self, ctx):
         """
