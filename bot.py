@@ -118,6 +118,20 @@ class DeckForgeBot(commands.Bot):
             await self.db_pool.close()
             print("✅ Database connection pool closed")
         await super().close()
+    
+    async def get_server_deck(self, guild_id: int):
+        """
+        Get the deck assigned to a server via web admin portal
+        Returns: dict with deck info or None if no deck assigned
+        """
+        async with self.db_pool.acquire() as conn:
+            deck = await conn.fetchrow(
+                """SELECT d.* FROM decks d
+                   INNER JOIN server_decks sd ON d.deck_id = sd.deck_id
+                   WHERE sd.guild_id = $1""",
+                guild_id
+            )
+            return dict(deck) if deck else None
 
 
 async def main():

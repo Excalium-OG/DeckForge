@@ -56,7 +56,7 @@ class CardCommands(commands.Cog):
         return user_id in self.admin_ids or user_id == self.bot.owner_id
     
     async def get_guild_drop_rates(self, conn, guild_id: Optional[int]) -> dict:
-        """Get drop rates for a guild, or defaults if not configured"""
+        """Get drop rates for a guild, or defaults if not configured (DEPRECATED - use get_deck_drop_rates)"""
         if not guild_id:
             return get_default_drop_rates()
         
@@ -78,6 +78,26 @@ class CardCommands(commands.Cog):
         
         return rates
     
+    async def get_deck_drop_rates(self, conn, deck_id: int) -> dict:
+        """Get drop rates for a deck from rarity_ranges table"""
+        # Fetch deck-specific rates from rarity_ranges
+        rates_rows = await conn.fetch(
+            "SELECT rarity, drop_rate FROM rarity_ranges WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not rates_rows:
+            return get_default_drop_rates()
+        
+        rates = {row['rarity']: row['drop_rate'] for row in rates_rows}
+        
+        # Ensure all rarities are present
+        for rarity in RARITY_HIERARCHY:
+            if rarity not in rates:
+                return get_default_drop_rates()
+        
+        return rates
+    
     @commands.command(name='drop')
     async def drop_cards(self, ctx, amount: int = 1, pack_type: str = "Normal Pack"):
         """
@@ -87,6 +107,21 @@ class CardCommands(commands.Cog):
         """
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
+        
+        # Check if server has an assigned deck
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
+        
+        deck_id = deck['deck_id']
         
         # Validate amount
         if amount < 1 or amount > 10:
@@ -129,8 +164,11 @@ class CardCommands(commands.Cog):
                     user_id, pack_type, new_qty
                 )
             
-            # Get all available cards grouped by rarity
-            all_cards = await conn.fetch("SELECT card_id, name, rarity FROM cards")
+            # Get all available cards from the assigned deck
+            all_cards = await conn.fetch(
+                "SELECT card_id, name, rarity FROM cards WHERE deck_id = $1",
+                deck_id
+            )
             
             if len(all_cards) == 0:
                 # Refund packs
@@ -141,7 +179,7 @@ class CardCommands(commands.Cog):
                        DO UPDATE SET quantity = user_packs.quantity + $3""",
                     user_id, pack_type, amount
                 )
-                await ctx.send("❌ No cards in the database! Admin needs to add cards using `!addcard`.")
+                await ctx.send(f"❌ No cards in the **{deck['name']}** deck! Contact the deck creator to add cards via the web portal.")
                 return
             
             # Group cards by rarity
@@ -152,8 +190,8 @@ class CardCommands(commands.Cog):
                     cards_by_rarity[rarity] = []
                 cards_by_rarity[rarity].append(card)
             
-            # Get base drop rates for this guild
-            base_rates = await self.get_guild_drop_rates(conn, guild_id)
+            # Get base drop rates for this deck
+            base_rates = await self.get_deck_drop_rates(conn, deck_id)
             
             # Apply pack modifier to get modified drop rates
             drop_rates = apply_pack_modifier(base_rates, pack_type)
