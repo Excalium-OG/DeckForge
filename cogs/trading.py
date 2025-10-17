@@ -335,6 +335,23 @@ class TradingCommands(commands.Cog):
         Usage: !tradeadd [card_id] [amount]
         """
         user_id = ctx.author.id
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        # Must be in a server
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        # Check if server has an assigned deck
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
+        
+        deck_id = deck['deck_id']
         
         if amount < 1:
             await ctx.send("❌ Amount must be at least 1!")
@@ -358,14 +375,22 @@ class TradingCommands(commands.Cog):
             
             trade_id = trade['trade_id']
             
-            # Verify card exists
+            # Verify card exists and belongs to this server's deck
             card = await conn.fetchrow(
-                "SELECT name, rarity FROM cards WHERE card_id = $1",
+                "SELECT name, rarity, deck_id FROM cards WHERE card_id = $1",
                 card_id
             )
             
             if not card:
                 await ctx.send(f"❌ Card ID `{card_id}` does not exist!")
+                return
+            
+            # Verify card belongs to this server's deck
+            if card['deck_id'] != deck_id:
+                await ctx.send(
+                    f"❌ Card **{card['name']}** is not part of this server's deck!\n"
+                    f"You can only trade cards from **{deck['name']}** in this server."
+                )
                 return
             
             # Check user's inventory
