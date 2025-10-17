@@ -4,7 +4,6 @@ import asyncpg
 import secrets
 from fastapi import FastAPI, Request, Depends, HTTPException, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from authlib.integrations.starlette_client import OAuth
 from starlette.middleware.sessions import SessionMiddleware
@@ -24,8 +23,26 @@ app.add_middleware(
     https_only=True    # Required when using SameSite=None
 )
 
-# Mount static files and templates
-app.mount("/static", StaticFiles(directory="web/static"), name="static")
+# Mount static files and templates with no-cache headers
+from fastapi.staticfiles import StaticFiles as BaseStaticFiles
+
+class NoCacheStaticFiles(BaseStaticFiles):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    async def __call__(self, scope, receive, send):
+        async def send_wrapper(message):
+            if message['type'] == 'http.response.start':
+                headers = list(message.get('headers', []))
+                # Add no-cache headers
+                headers.append((b'cache-control', b'no-store, no-cache, must-revalidate, max-age=0'))
+                headers.append((b'pragma', b'no-cache'))
+                headers.append((b'expires', b'0'))
+                message['headers'] = headers
+            await send(message)
+        await super().__call__(scope, receive, send_wrapper)
+
+app.mount("/static", NoCacheStaticFiles(directory="web/static"), name="static")
 templates = Jinja2Templates(directory="web/templates")
 
 # Discord OAuth2 configuration
