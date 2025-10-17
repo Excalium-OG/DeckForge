@@ -97,6 +97,7 @@ async def get_user_managed_guilds(access_token: str) -> List[Dict]:
         response = await client.get('https://discord.com/api/users/@me/guilds', headers=headers)
         
         if response.status_code != 200:
+            print(f"Discord API error: {response.status_code} - {response.text}")
             return []
         
         guilds = response.json()
@@ -105,6 +106,7 @@ async def get_user_managed_guilds(access_token: str) -> List[Dict]:
             guild for guild in guilds
             if int(guild.get('permissions', 0)) & 0x20
         ]
+        print(f"User managed guilds: {len(managed_guilds)} found")
         return managed_guilds
 
 # Dependency: Require authentication
