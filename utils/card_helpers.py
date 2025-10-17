@@ -54,12 +54,13 @@ def sort_cards_by_rarity(cards: list) -> list:
     """
     return sorted(cards, key=lambda c: (get_rarity_sort_key(c.get('rarity', '')), c.get('name', '').lower()))
 
-def check_drop_cooldown(last_drop_ts: Optional[datetime]) -> tuple[bool, Optional[timedelta]]:
+def check_drop_cooldown(last_drop_ts: Optional[datetime], cooldown_hours: int = 8) -> tuple[bool, Optional[timedelta]]:
     """
-    Check if user can drop cards based on 8-hour cooldown.
+    Check if user can drop cards based on configurable cooldown.
     
     Args:
         last_drop_ts: Timestamp of last drop, or None if never dropped
+        cooldown_hours: Cooldown period in hours (default: 8)
         
     Returns:
         Tuple of (can_drop: bool, time_remaining: Optional[timedelta])
@@ -68,7 +69,7 @@ def check_drop_cooldown(last_drop_ts: Optional[datetime]) -> tuple[bool, Optiona
         return True, None
     
     now = datetime.now(timezone.utc)
-    cooldown_period = timedelta(hours=8)
+    cooldown_period = timedelta(hours=cooldown_hours)
     time_since_last_drop = now - last_drop_ts
     
     if time_since_last_drop >= cooldown_period:

@@ -102,10 +102,27 @@ class PackCommands(commands.Cog):
     @commands.command(name='claimfreepack')
     async def claim_free_pack(self, ctx):
         """
-        Claim 1 free Normal Pack every 8 hours.
+        Claim 1 free Normal Pack based on deck cooldown (default 8 hours).
         Usage: !claimfreepack
         """
         user_id = ctx.author.id
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        # Check if server has an assigned deck
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
+        
+        # Get cooldown from deck settings
+        cooldown_hours = deck.get('free_pack_cooldown_hours', 8)
         
         async with self.db_pool.acquire() as conn:
             # Get or create player record
@@ -124,8 +141,8 @@ class PackCommands(commands.Cog):
             else:
                 last_drop_ts = player['last_drop_ts']
             
-            # Check cooldown (reusing the same cooldown system)
-            can_claim, time_remaining = check_drop_cooldown(last_drop_ts)
+            # Check cooldown using deck's configured cooldown
+            can_claim, time_remaining = check_drop_cooldown(last_drop_ts, cooldown_hours)
             
             if not can_claim and time_remaining:
                 cooldown_str = format_cooldown_time(time_remaining)
