@@ -11,11 +11,6 @@ A Discord bot for a collectible rocket-themed trading card game with drop mechan
 - `!balance` - Check your credit balance
 - `!viewdroprates` - View current drop rate configuration for the server
 
-### Admin Commands
-- `!addcard [rarity] [name] [description]` - Add new cards (requires image attachment)
-- `!updateimage [card_id]` - Update card image (requires image attachment)
-- `!setdroprate [rarity] [percentage]` - Configure drop rates (must total 100%)
-
 ### Future Features (Placeholders)
 - `!recycle [instance_id]` - Recycle cards for credits (Phase 2)
 - `!buycredits [amount]` - Buy credits (Phase 2 - Stripe integration)
