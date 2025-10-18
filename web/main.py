@@ -814,3 +814,10 @@ async def update_rarity_rates(
 async def health():
     """Health check endpoint"""
     return {"status": "ok", "service": "DeckForge Admin Portal"}
+
+import os
+import uvicorn
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))  # Railway injects this
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
