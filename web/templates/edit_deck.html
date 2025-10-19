@@ -12,6 +12,29 @@
             <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
         </div>
     </div>
+
+<!-- Public Marketplace toggle (insert near deck settings) -->
+<section id="public-settings" style="margin-top:1.25rem; padding:0.75rem; border:1px solid #eee; border-radius:6px;">
+  <h3>Marketplace Settings</h3>
+  <form action="/deck/{{ deck.deck_id }}/set-public" method="post">
+    <div style="display:flex;gap:1rem;align-items:center;">
+      <label style="display:flex;align-items:center;gap:.5rem;">
+        <input type="checkbox" name="is_public" value="1" {% if deck.get('is_public') %}checked{% endif %}>
+        Make this deck public in the Marketplace
+      </label>
+    </div>
+
+    <div style="margin-top:.5rem;">
+      <label for="public_description">Public description (shown in Marketplace)</label><br>
+      <textarea id="public_description" name="public_description" rows="3" style="width:100%;">{{ deck.get('public_description') or '' }}</textarea>
+    </div>
+
+    <div style="margin-top:.75rem;">
+      <button type="submit">Save Marketplace Settings</button>
+      <span style="margin-left:1rem;color:#666;font-size:.9rem;">Only the deck owner or global admins can make a deck public.</span>
+    </div>
+  </form>
+</section>
     
     <div class="section">
         <h3>Add New Card</h3>
