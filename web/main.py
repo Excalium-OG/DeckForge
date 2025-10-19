@@ -1,3 +1,4 @@
+# main.py — updated with Marketplace, set-public, and adopt endpoints
 import os
 import asyncio
 import asyncpg
@@ -455,6 +456,125 @@ async def serve_card_image(image_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Marketplace: list public decks
+@app.get("/marketplace", response_class=HTMLResponse)
+async def marketplace(request: Request, user = Depends(require_auth)):
+    """Show public decks available for adoption"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT deck_id, name, created_by, created_at, public_description FROM decks WHERE is_public = TRUE AND (public_visible IS NULL OR public_visible = TRUE) ORDER BY created_at DESC"
+        )
+    decks = [dict(r) for r in rows]
+
+    # Also pass the user's managed guilds so the template can populate adopt select
+    managed_guilds = await get_user_managed_guilds(user.get('access_token', ''))
+    return templates.TemplateResponse("marketplace.html", {
+        "request": request,
+        "user": user,
+        "decks": decks,
+        "managed_guilds": managed_guilds
+    })
+
+# Endpoint for deck owner to set public flag and description
+@app.post("/deck/{deck_id}/set-public")
+async def set_deck_public(request: Request, deck_id: int, is_public: int = Form(0), public_description: str = Form(""), user = Depends(require_admin)):
+    """Toggle public visibility for a deck (owner or global admin only)"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        deck = await conn.fetchrow("SELECT created_by FROM decks WHERE deck_id = $1", deck_id)
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        await conn.execute(
+            "UPDATE decks SET is_public = $1, public_description = $2 WHERE deck_id = $3",
+            bool(is_public), public_description or None, deck_id
+        )
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
+# Adopt (import) a public deck into a managed server (clones deck content and assigns)
+@app.post("/marketplace/{deck_id}/adopt")
+async def adopt_deck(deck_id: int, guild_id: int = Form(...), user = Depends(require_admin)):
+    """
+    Clone a public deck and assign it to the specified guild.
+    The cloned deck is owned by the importing user (they can edit it).
+    """
+    # Verify user manages the target guild
+    managed_guilds = await get_user_managed_guilds(user.get('access_token',''))
+    guild_ids = [int(g['id']) for g in managed_guilds]
+    if guild_id not in guild_ids and not is_global_admin(user['id']):
+        raise HTTPException(status_code=403, detail="You don't manage this server")
+
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        public_deck = await conn.fetchrow(
+            "SELECT * FROM decks WHERE deck_id = $1 AND is_public = TRUE AND (public_visible IS NULL OR public_visible = TRUE)",
+            deck_id
+        )
+        if not public_deck:
+            raise HTTPException(status_code=404, detail="Public deck not found")
+
+        async with conn.transaction():
+            # Create cloned deck owned by importer
+
+            public_deck = dict(public_deck)
+
+            new_deck = await conn.fetchrow(
+                """INSERT INTO decks (name, created_by, free_pack_cooldown_hours)
+                   VALUES ($1, $2, $3)
+                   RETURNING deck_id""",
+                public_deck['name'], user['id'], public_deck.get('free_pack_cooldown_hours', 24)
+            )
+            new_deck_id = new_deck['deck_id']
+
+            # Copy rarity_ranges
+            rates = await conn.fetch("SELECT rarity, drop_rate FROM rarity_ranges WHERE deck_id = $1", deck_id)
+            for r in rates:
+                await conn.execute(
+                    "INSERT INTO rarity_ranges (deck_id, rarity, drop_rate) VALUES ($1, $2, $3)",
+                    new_deck_id, r['rarity'], r['drop_rate']
+                )
+
+            # Copy card_templates and keep mapping (template_id_old -> template_id_new)
+            templates_rows = await conn.fetch("SELECT template_id, field_name, field_type, dropdown_options, field_order, is_required FROM card_templates WHERE deck_id = $1", deck_id)
+            template_map = {}
+            for t in templates_rows:
+                new_t = await conn.fetchrow(
+                    """INSERT INTO card_templates (deck_id, field_name, field_type, dropdown_options, field_order, is_required)
+                       VALUES ($1, $2, $3, $4, $5, $6) RETURNING template_id""",
+                    new_deck_id, t['field_name'], t['field_type'], t['dropdown_options'], t['field_order'], t['is_required']
+                )
+                template_map[t['template_id']] = new_t['template_id']
+
+            # Copy cards and their template field values (map to new template ids)
+            cards = await conn.fetch("SELECT * FROM cards WHERE deck_id = $1", deck_id)
+            for c in cards:
+                new_card = await conn.fetchrow(
+                    """INSERT INTO cards (deck_id, name, description, rarity, image_url, created_by)
+                       VALUES ($1, $2, $3, $4, $5, $6) RETURNING card_id""",
+                    new_deck_id, c['name'], c['description'], c['rarity'], c['image_url'], user['id']
+                )
+                new_card_id = new_card['card_id']
+
+                # Copy template fields for this card
+                card_fields = await conn.fetch("SELECT template_id, field_value FROM card_template_fields WHERE card_id = $1", c['card_id'])
+                for cf in card_fields:
+                    new_template_id = template_map.get(cf['template_id'])
+                    if new_template_id:
+                        await conn.execute(
+                            "INSERT INTO card_template_fields (card_id, template_id, field_value) VALUES ($1, $2, $3)",
+                            new_card_id, new_template_id, cf['field_value']
+                        )
+
+            # Assign cloned deck to the selected guild
+            await conn.execute(
+                "INSERT INTO server_decks (guild_id, deck_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET deck_id = $2",
+                guild_id, new_deck_id
+            )
+
+    return RedirectResponse(url="/dashboard", status_code=303)
+
 @app.get("/deck/create", response_class=HTMLResponse)
 async def create_deck_form(request: Request, user = Depends(require_admin)):
     """Show deck creation form"""
@@ -560,7 +680,7 @@ async def edit_deck_form(request: Request, deck_id: int, user = Depends(require_
                       array_agg(json_build_object(
                           'template_id', ctf.template_id,
                           'field_value', ctf.field_value
-                      ) ORDER BY ct.field_order) FILTER (WHERE ctf.field_id IS NOT NULL) as template_values
+                      ) ORDER BY ct.field_order) FILTER (WHERE ctf.template_id IS NOT NULL) as template_values
                FROM cards c
                LEFT JOIN card_template_fields ctf ON c.card_id = ctf.card_id
                LEFT JOIN card_templates ct ON ctf.template_id = ct.template_id
