@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS trades (
     finalized_at TIMESTAMP WITH TIME ZONE,
     initiator_accepted BOOLEAN DEFAULT FALSE,
     responder_accepted BOOLEAN DEFAULT FALSE,
+    initiator_finalized BOOLEAN DEFAULT FALSE,
+    responder_finalized BOOLEAN DEFAULT FALSE,
     expires_at TIMESTAMP WITH TIME ZONE
 );
 
