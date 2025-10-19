@@ -428,7 +428,9 @@ class TradingCommands(commands.Cog):
                     """UPDATE trades
                        SET status = 'active',
                            initiator_accepted = FALSE,
-                           responder_accepted = FALSE
+                           responder_accepted = FALSE,
+                           initiator_finalized = FALSE,
+                           responder_finalized = FALSE
                        WHERE trade_id = $1""",
                     trade_id
                 )
@@ -510,7 +512,9 @@ class TradingCommands(commands.Cog):
                     """UPDATE trades
                        SET status = 'active',
                            initiator_accepted = FALSE,
-                           responder_accepted = FALSE
+                           responder_accepted = FALSE,
+                           initiator_finalized = FALSE,
+                           responder_finalized = FALSE
                        WHERE trade_id = $1""",
                     trade_id
                 )
@@ -566,9 +570,24 @@ class TradingCommands(commands.Cog):
             
             trade_id = trade['trade_id']
             is_initiator = user_id == trade['initiator_id']
+
+            finalize_field = 'initiator_finalized' if is_initiator else 'responder_finalized'
+            await conn.execute(
+                f"UPDATE trades SET {finalize_field} = TRUE WHERE trade_id = $1",
+                trade_id
+            )
+
+            updated_trade = await conn.fetchrow(
+                "SELECT * FROM trades WHERE trade_id = $1",
+                trade_id
+            )
+            
+            if not updated_trade['initiator_finalized'] or not updated_trade['responder_finalized']:
+                await ctx.send("✅ You've finalized your side of the trade. Waiting for the other player...")
+                return
             
             # Track who has finalized
-            finalize_field = 'initiator_finalized' if is_initiator else 'responder_finalized'
+            # finalize_field = 'initiator_finalized' if is_initiator else 'responder_finalized'
             
             # Check if field exists, if not we'll track differently
             # For now, let's use a simpler approach: both must call finalize in sequence
