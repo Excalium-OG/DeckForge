@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS trades (
     expires_at TIMESTAMP WITH TIME ZONE
 );
 
+-- Traded Item Fields
 CREATE TABLE IF NOT EXISTS trade_items (
     trade_id UUID REFERENCES trades(trade_id) ON DELETE CASCADE,
     user_id BIGINT NOT NULL,
