@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS pending_trades (
   offered_instance_id UUID REFERENCES user_cards(instance_id),
   requested_instance_id UUID REFERENCES user_cards(instance_id),
   status TEXT DEFAULT 'pending',
+  initiator_finalized BOOLEAN DEFAULT FALSE,
+  responder_finalized BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
