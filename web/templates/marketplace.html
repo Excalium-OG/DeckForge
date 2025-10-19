@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Marketplace - DeckForge{% endblock %}
+
+{% block content %}
+<h1>Marketplace</h1>
+<p>Browse public decks created by the community. Pick a deck and adopt it into one of your managed servers.</p>
+
+{% if decks %}
+  <div class="marketplace-grid">
+    {% for deck in decks %}
+      <div class="deck-card">
+        <h2>{{ deck.name }}</h2>
+        <p class="meta">Created by: {{ deck.created_by }} • {{ deck.created_at.strftime('%Y-%m-%d') if deck.created_at else '' }}</p>
+        <p class="description">{{ deck.public_description or "No description provided." }}</p>
+
+        <div class="deck-actions">
+          <form action="/marketplace/{{ deck.deck_id }}/adopt" method="post" style="display:inline-block">
+            <label for="guild_{{ deck.deck_id }}">Adopt into server</label>
+            <select name="guild_id" id="guild_{{ deck.deck_id }}" required>
+              {% if managed_guilds %}
+                {% for g in managed_guilds %}
+                  <option value="{{ g.id }}">{{ g.name }}</option>
+                {% endfor %}
+              {% else %}
+                <option disabled>No managed servers found</option>
+              {% endif %}
+            </select>
+            <button type="submit">Adopt</button>
+          </form>
+
+          <a href="/deck/{{ deck.deck_id }}/view" class="button">View Deck</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p>No public decks found.</p>
+{% endif %}
+
+<style>
+.marketplace-grid { display:flex; flex-wrap:wrap; gap:1rem; }
+.deck-card { border:1px solid #ddd; padding:1rem; width:320px; border-radius:6px; background:#fff; }
+.deck-card h2 { margin:0 0 .25rem 0; }
+.deck-actions { margin-top:.5rem; display:flex; gap:.5rem; align-items:center; }
+.deck-actions select { min-width:170px; }
+.button { text-decoration:none; padding:.4rem .6rem; background:#2f80ed; color:#fff; border-radius:4px; }
+</style>
+{% endblock %}
