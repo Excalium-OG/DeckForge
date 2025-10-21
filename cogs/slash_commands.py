@@ -276,20 +276,33 @@ class SlashCommands(commands.Cog):
         amount: int = 1,
         pack_type: str = "Normal Pack"
     ):
-        """Open packs to get cards - delegates to prefix command"""
+        """Open packs to get cards"""
         # Defer response since this might take a moment
         await interaction.response.defer()
         
-        # Get the context from the interaction
-        ctx = await self.bot.get_context(interaction)
-        
-        # Call the prefix command
+        # Get the CardCommands cog
         cards_cog = self.bot.get_cog('CardCommands')
-        if cards_cog:
-            # Create a temporary context for the prefix command
-            await ctx.invoke(self.bot.get_command('drop'), amount=amount, pack_type=pack_type)
-        else:
+        if not cards_cog:
             await interaction.followup.send("❌ Command temporarily unavailable!")
+            return
+        
+        # Create a fake context object for the prefix command
+        # We'll create a minimal context that the command can use
+        class FakeMessage:
+            def __init__(self, author, guild, channel):
+                self.author = author
+                self.guild = guild
+                self.channel = channel
+        
+        fake_msg = FakeMessage(interaction.user, interaction.guild, interaction.channel)
+        ctx = await self.bot.get_context(fake_msg)
+        ctx.send = interaction.followup.send  # Override send to use followup
+        
+        # Call the drop command
+        try:
+            await cards_cog.drop_cards(ctx, amount, pack_type)
+        except Exception as e:
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}")
     
     @app_commands.command(name="mycards", description="View your card collection")
     @app_commands.describe(page="Page number to view (default: 1)")
@@ -298,39 +311,78 @@ class SlashCommands(commands.Cog):
         interaction: discord.Interaction,
         page: int = 1
     ):
-        """View your card collection - delegates to prefix command"""
+        """View your card collection"""
         await interaction.response.defer()
         
-        ctx = await self.bot.get_context(interaction)
         cards_cog = self.bot.get_cog('CardCommands')
-        if cards_cog:
-            await ctx.invoke(self.bot.get_command('mycards'), page=page)
-        else:
+        if not cards_cog:
             await interaction.followup.send("❌ Command temporarily unavailable!")
+            return
+        
+        class FakeMessage:
+            def __init__(self, author, guild, channel):
+                self.author = author
+                self.guild = guild
+                self.channel = channel
+        
+        fake_msg = FakeMessage(interaction.user, interaction.guild, interaction.channel)
+        ctx = await self.bot.get_context(fake_msg)
+        ctx.send = interaction.followup.send
+        
+        try:
+            await cards_cog.my_cards(ctx)
+        except Exception as e:
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}")
     
     @app_commands.command(name="recycle", description="Convert duplicate cards into credits")
     async def recycle_slash(self, interaction: discord.Interaction):
-        """Recycle duplicate cards for credits - delegates to prefix command"""
+        """Recycle duplicate cards for credits"""
         await interaction.response.defer()
         
-        ctx = await self.bot.get_context(interaction)
         cards_cog = self.bot.get_cog('CardCommands')
-        if cards_cog:
-            await ctx.invoke(self.bot.get_command('recycle'))
-        else:
+        if not cards_cog:
             await interaction.followup.send("❌ Command temporarily unavailable!")
+            return
+        
+        class FakeMessage:
+            def __init__(self, author, guild, channel):
+                self.author = author
+                self.guild = guild
+                self.channel = channel
+        
+        fake_msg = FakeMessage(interaction.user, interaction.guild, interaction.channel)
+        ctx = await self.bot.get_context(fake_msg)
+        ctx.send = interaction.followup.send
+        
+        try:
+            await cards_cog.recycle_cards(ctx)
+        except Exception as e:
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}")
     
     @app_commands.command(name="claimfreepack", description="Claim your free pack (cooldown based on deck)")
     async def claimfreepack(self, interaction: discord.Interaction):
-        """Claim a free pack - delegates to prefix command"""
+        """Claim a free pack"""
         await interaction.response.defer()
         
-        ctx = await self.bot.get_context(interaction)
         packs_cog = self.bot.get_cog('PackCommands')
-        if packs_cog:
-            await ctx.invoke(self.bot.get_command('claimfreepack'))
-        else:
+        if not packs_cog:
             await interaction.followup.send("❌ Command temporarily unavailable!")
+            return
+        
+        class FakeMessage:
+            def __init__(self, author, guild, channel):
+                self.author = author
+                self.guild = guild
+                self.channel = channel
+        
+        fake_msg = FakeMessage(interaction.user, interaction.guild, interaction.channel)
+        ctx = await self.bot.get_context(fake_msg)
+        ctx.send = interaction.followup.send
+        
+        try:
+            await packs_cog.claim_free_pack(ctx)
+        except Exception as e:
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}")
     
     @app_commands.command(name="buypack", description="Purchase packs with credits")
     @app_commands.describe(
@@ -348,15 +400,28 @@ class SlashCommands(commands.Cog):
         pack_type: str,
         amount: int = 1
     ):
-        """Purchase packs with credits - delegates to prefix command"""
+        """Purchase packs with credits"""
         await interaction.response.defer()
         
-        ctx = await self.bot.get_context(interaction)
         packs_cog = self.bot.get_cog('PackCommands')
-        if packs_cog:
-            await ctx.invoke(self.bot.get_command('buypack'), pack_type=pack_type, amount=amount)
-        else:
+        if not packs_cog:
             await interaction.followup.send("❌ Command temporarily unavailable!")
+            return
+        
+        class FakeMessage:
+            def __init__(self, author, guild, channel):
+                self.author = author
+                self.guild = guild
+                self.channel = channel
+        
+        fake_msg = FakeMessage(interaction.user, interaction.guild, interaction.channel)
+        ctx = await self.bot.get_context(fake_msg)
+        ctx.send = interaction.followup.send
+        
+        try:
+            await packs_cog.buy_pack(ctx, pack_type, amount)
+        except Exception as e:
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}")
     
     @app_commands.command(name="buycredits", description="Information about purchasing credits")
     async def buycredits(self, interaction: discord.Interaction):
