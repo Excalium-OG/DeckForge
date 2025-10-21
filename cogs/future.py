@@ -21,44 +21,20 @@ class FutureCommands(commands.Cog):
         return user_id in self.admin_ids or user_id == self.bot.owner_id
     
     @commands.command(name='buycredits')
-    async def buy_credits(self, ctx, amount: int = 100):
+    async def buy_credits(self, ctx):
         """
-        [PLACEHOLDER] Simulate buying credits.
-        Usage: !buycredits [amount]
+        Purchase credits with real money (microtransactions).
+        Usage: !buycredits
         """
-        user_id = ctx.author.id
-        
-        if amount <= 0 or amount > 10000:
-            await ctx.send("❌ Amount must be between 1 and 10,000!")
-            return
-        
-        async with self.db_pool.acquire() as conn:
-            # Get or create player
-            player = await conn.fetchrow(
-                "SELECT user_id, credits FROM players WHERE user_id = $1",
-                user_id
-            )
-            
-            if not player:
-                await conn.execute(
-                    "INSERT INTO players (user_id, credits) VALUES ($1, $2)",
-                    user_id, amount
-                )
-                new_balance = amount
-            else:
-                await conn.execute(
-                    "UPDATE players SET credits = credits + $1 WHERE user_id = $2",
-                    amount, user_id
-                )
-                new_balance = player['credits'] + amount
-        
         embed = discord.Embed(
-            title="💰 Credits Added (Simulation)",
-            description=f"Added **{amount:,}** credits to your account!",
+            title="💳 Purchase Credits",
+            description="Credit purchases are not yet available!\n\n"
+                       "**How to earn credits:**\n"
+                       "• Recycle duplicate cards using `!recycle`\n"
+                       "• Microtransactions coming soon via Stripe integration",
             color=discord.Color.gold()
         )
-        embed.add_field(name="New Balance", value=f"{new_balance:,} credits", inline=False)
-        embed.set_footer(text="Stripe integration coming in Phase 2")
+        embed.set_footer(text="Credits can only be earned by recycling cards for now")
         
         await ctx.send(embed=embed)
     

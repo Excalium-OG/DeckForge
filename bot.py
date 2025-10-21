@@ -25,16 +25,17 @@ if admin_ids_env:
 
 
 class DeckForgeBot(commands.Bot):
-    """Custom bot class with database pool"""
+    """Custom bot class with database pool and slash command support"""
     
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.guilds = True
         
         super().__init__(
             command_prefix=COMMAND_PREFIX,
             intents=intents,
-            help_command=commands.DefaultHelpCommand()
+            help_command=None  # Disable default help for custom slash command
         )
         
         self.db_pool = None
@@ -61,6 +62,7 @@ class DeckForgeBot(commands.Bot):
         await self.load_extension('cogs.packs')
         await self.load_extension('cogs.trading')
         await self.load_extension('cogs.future')
+        await self.load_extension('cogs.slash_commands')  # Slash command support
         print("✅ Loaded all cogs")
     
     async def run_migrations(self):
@@ -91,9 +93,17 @@ class DeckForgeBot(commands.Bot):
     
     async def on_ready(self):
         """Called when bot is ready"""
+        # Sync slash commands
+        try:
+            synced = await self.tree.sync()
+            print(f"✅ Synced {len(synced)} slash command(s)")
+        except Exception as e:
+            print(f"⚠️ Failed to sync slash commands: {e}")
+        
         print(f"🚀 DeckForge bot is ready!")
         print(f"   Logged in as: {self.user.name} ({self.user.id})")
-        print(f"   Command prefix: {COMMAND_PREFIX}")
+        print(f"   Command prefix: {COMMAND_PREFIX} (legacy)")
+        print(f"   Slash commands: Enabled")
         print(f"   Admin IDs: {self.admin_ids if self.admin_ids else 'None (only bot owner)'}")
         print(f"   Serving {len(self.guilds)} guild(s)")
         print("-" * 50)
