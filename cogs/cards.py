@@ -102,8 +102,8 @@ class CardCommands(commands.Cog):
     async def drop_cards(self, ctx, amount: int = 1, pack_type: str = "Normal Pack"):
         """
         Open packs to get cards. Each pack gives 2 cards.
-        Usage: !drop [amount] [pack_type]
-        Examples: !drop, !drop 2, !drop 1 "Booster Pack"
+        Usage: /drop [amount] [pack_type]
+        Examples: /drop, /drop 2, /drop 1 "Booster Pack"
         """
         # Defer if invoked as slash command to avoid timeout
         if ctx.interaction:
@@ -151,7 +151,7 @@ class CardCommands(commands.Cog):
                 await ctx.send(
                     f"❌ You don't have enough **{pack_type}**s!\n"
                     f"You have: **{current_qty or 0}**, need: **{amount}**\n"
-                    f"Use `!mypacks` to see your inventory or `!claimfreepack` for a free pack."
+                    f"Use `/mypacks` to see your inventory or `/claimfreepack` for a free pack."
                 )
                 return
             
@@ -272,7 +272,7 @@ class CardCommands(commands.Cog):
     async def my_cards(self, ctx):
         """
         List all owned cards from this server's deck with pagination. Shows grouped cards by rarity.
-        Usage: !mycards
+        Usage: /mycards
         """
         # Defer if invoked as slash command to avoid timeout
         if ctx.interaction:
@@ -310,7 +310,7 @@ class CardCommands(commands.Cog):
             )
         
         if not cards:
-            await ctx.send(f"📦 You don't have any cards from **{deck_name}** yet! Use `!claimfreepack` to get a pack, then `!drop` to open it.")
+            await ctx.send(f"📦 You don't have any cards from **{deck_name}** yet! Use `/claimfreepack` to get a pack, then `/drop` to open it.")
             return
         
         # Convert to list and sort by rarity hierarchy
@@ -395,8 +395,8 @@ class CardCommands(commands.Cog):
     async def recycle_cards(self, ctx, card_id: int, amount: int = 1):
         """
         Recycle duplicate cards from this server's deck for credits.
-        Usage: !recycle [card_id] [amount]
-        Example: !recycle 5 3 (recycles 3 copies of card ID 5)
+        Usage: /recycle [card_id] [amount]
+        Example: /recycle 5 3 (recycles 3 copies of card ID 5)
         """
         # Defer if invoked as slash command to avoid timeout
         if ctx.interaction:
@@ -505,7 +505,7 @@ class CardCommands(commands.Cog):
     async def card_info(self, ctx, *, search_term: str):
         """
         Show detailed information about a card.
-        Usage: !cardinfo [name or ID]
+        Usage: /cardinfo [name or ID]
         """
         async with self.db_pool.acquire() as conn:
             # Try to parse as card_id first

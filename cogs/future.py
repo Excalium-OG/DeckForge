@@ -24,13 +24,13 @@ class FutureCommands(commands.Cog):
     async def buy_credits(self, ctx):
         """
         Purchase credits with real money (microtransactions).
-        Usage: !buycredits
+        Usage: /buycredits
         """
         embed = discord.Embed(
             title="💳 Purchase Credits",
             description="Credit purchases are not yet available!\n\n"
                        "**How to earn credits:**\n"
-                       "• Recycle duplicate cards using `!recycle`\n"
+                       "• Recycle duplicate cards using `/recycle`\n"
                        "• Microtransactions coming soon via Stripe integration",
             color=discord.Color.gold()
         )
@@ -42,7 +42,7 @@ class FutureCommands(commands.Cog):
     async def launch_card(self, ctx, instance_id: str):
         """
         [PLACEHOLDER] Launch a rocket card.
-        Usage: !launch [instance_id]
+        Usage: /launch [instance_id]
         """
         user_id = ctx.author.id
         
@@ -85,7 +85,7 @@ class FutureCommands(commands.Cog):
     async def check_balance(self, ctx):
         """
         Check your credit balance.
-        Usage: !balance
+        Usage: /balance
         """
         user_id = ctx.author.id
         

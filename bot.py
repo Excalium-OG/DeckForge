@@ -113,7 +113,7 @@ class DeckForgeBot(commands.Bot):
         if isinstance(error, commands.CommandNotFound):
             return
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"❌ Missing required argument: `{error.param.name}`\nUse `!help {ctx.command}` for usage info.")
+            await ctx.send(f"❌ Missing required argument: `{error.param.name}`\nUse `/help {ctx.command}` for usage info.")
         elif isinstance(error, commands.BadArgument):
             await ctx.send(f"❌ Invalid argument: {str(error)}")
         elif isinstance(error, commands.CheckFailure):

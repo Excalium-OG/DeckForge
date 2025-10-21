@@ -152,7 +152,7 @@ class TradingCommands(commands.Cog):
     async def request_trade(self, ctx, member: discord.Member):
         """
         Initiate a trade with another user in this server.
-        Usage: !requesttrade @user
+        Usage: /requesttrade @user
         """
         initiator_id = ctx.author.id
         responder_id = member.id
@@ -215,7 +215,7 @@ class TradingCommands(commands.Cog):
             title="📩 Trade Request",
             description=(
                 f"{ctx.author.mention} wants to trade with {member.mention}!\n\n"
-                f"{member.mention}, use `!accepttrade` to begin trading.\n"
+                f"{member.mention}, use `/accepttrade` to begin trading.\n"
                 f"Trade expires in {TRADE_TIMEOUT_MINUTES} minutes."
             ),
             color=discord.Color.purple()
@@ -227,7 +227,7 @@ class TradingCommands(commands.Cog):
     async def accept_trade(self, ctx):
         """
         Accept a trade request or confirm your acceptance of the trade terms.
-        Usage: !accepttrade
+        Usage: /accepttrade
         """
         user_id = ctx.author.id
         
@@ -264,10 +264,10 @@ class TradingCommands(commands.Cog):
                         description=(
                             f"{ctx.author.mention} accepted the trade!\n\n"
                             f"**Both players can now:**\n"
-                            f"• Add cards: `!tradeadd [card_id] [amount]`\n"
-                            f"• Remove cards: `!traderemove [card_id] [amount]`\n"
-                            f"• When ready, both use `!accepttrade` to confirm\n"
-                            f"• Then both use `!finalize` to complete the trade\n\n"
+                            f"• Add cards: `/tradeadd [card_id] [amount]`\n"
+                            f"• Remove cards: `/traderemove [card_id] [amount]`\n"
+                            f"• When ready, both use `/accepttrade` to confirm\n"
+                            f"• Then both use `/finalize` to complete the trade\n\n"
                             f"Trade expires in {TRADE_TIMEOUT_MINUTES} minutes."
                         ),
                         color=discord.Color.green()
@@ -308,7 +308,7 @@ class TradingCommands(commands.Cog):
                         title="✅ Both Players Ready!",
                         description=(
                             "Both players have accepted the trade terms.\n\n"
-                            "**Final step:** Both players must use `!finalize` to complete the trade."
+                            "**Final step:** Both players must use `/finalize` to complete the trade."
                         ),
                         color=discord.Color.gold()
                     )
@@ -322,7 +322,7 @@ class TradingCommands(commands.Cog):
             if status == 'accepted':
                 await ctx.send(
                     "✅ Trade is already accepted by both parties. "
-                    "Use `!finalize` to complete the trade!"
+                    "Use `/finalize` to complete the trade!"
                 )
                 return
             
@@ -332,7 +332,7 @@ class TradingCommands(commands.Cog):
     async def trade_add(self, ctx, card_id: int, amount: int = 1):
         """
         Add cards to your side of the trade.
-        Usage: !tradeadd [card_id] [amount]
+        Usage: /tradeadd [card_id] [amount]
         """
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
@@ -447,7 +447,7 @@ class TradingCommands(commands.Cog):
     async def trade_remove(self, ctx, card_id: int, amount: int = 1):
         """
         Remove cards from your side of the trade.
-        Usage: !traderemove [card_id] [amount]
+        Usage: /traderemove [card_id] [amount]
         """
         user_id = ctx.author.id
         
@@ -529,7 +529,7 @@ class TradingCommands(commands.Cog):
     async def finalize_trade(self, ctx):
         """
         Finalize and execute the trade (both players must confirm).
-        Usage: !finalize
+        Usage: /finalize
         """
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
@@ -560,7 +560,7 @@ class TradingCommands(commands.Cog):
             if trade['status'] != 'accepted':
                 await ctx.send(
                     "❌ Trade must be accepted by both parties before finalizing! "
-                    "Both players need to use `!accepttrade` first."
+                    "Both players need to use `/accepttrade` first."
                 )
                 return
             

@@ -103,7 +103,7 @@ class PackCommands(commands.Cog):
     async def claim_free_pack(self, ctx):
         """
         Claim 1 free Normal Pack based on deck cooldown (default 8 hours).
-        Usage: !claimfreepack
+        Usage: /claimfreepack
         """
         # Defer if invoked as slash command to avoid timeout
         if ctx.interaction:
@@ -159,7 +159,7 @@ class PackCommands(commands.Cog):
             if total_packs >= MAX_TOTAL_PACKS:
                 await ctx.send(
                     f"❌ You've reached the maximum pack limit of **{MAX_TOTAL_PACKS}** packs!\n"
-                    f"Open some packs with `!drop` to make room."
+                    f"Open some packs with `/drop` to make room."
                 )
                 return
             
@@ -189,16 +189,20 @@ class PackCommands(commands.Cog):
                 inline=False
             )
             
-            embed.set_footer(text="Use !drop to open packs and get cards!")
+            embed.set_footer(text="Use /drop to open packs and get cards!")
             
             await ctx.send(embed=embed)
     
-    @commands.command(name='mypacks')
+    @commands.hybrid_command(name='mypacks', description="View your pack inventory")
     async def my_packs(self, ctx):
         """
         View your pack inventory.
-        Usage: !mypacks
+        Usage: /mypacks
         """
+        # Defer if invoked as slash command to avoid timeout
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         
         async with self.db_pool.acquire() as conn:
@@ -215,7 +219,7 @@ class PackCommands(commands.Cog):
             )
             
             if not packs:
-                embed.description = "You don't have any packs yet!\nUse `!claimfreepack` to get a free Normal Pack every 8 hours."
+                embed.description = "You don't have any packs yet!\nUse `/claimfreepack` to get a free Normal Pack every 8 hours."
             else:
                 pack_list = []
                 for pack in packs:
@@ -242,7 +246,7 @@ class PackCommands(commands.Cog):
                 inline=False
             )
             
-            embed.set_footer(text="Use !drop [amount] [pack_type] to open packs")
+            embed.set_footer(text="Use /drop [amount] [pack_type] to open packs")
             
             await ctx.send(embed=embed)
     
@@ -250,8 +254,8 @@ class PackCommands(commands.Cog):
     async def buy_pack(self, ctx, amount: int = 1, pack_type: str = "Normal Pack"):
         """
         Purchase packs with credits.
-        Usage: !buypack [amount] [pack_type]
-        Example: !buypack 3 "Booster Pack"
+        Usage: /buypack [amount] [pack_type]
+        Example: /buypack 3 "Booster Pack"
         
         Prices: Normal Pack (100c), Booster Pack (300c), Booster Pack+ (500c)
         """
@@ -455,7 +459,7 @@ class PackCommands(commands.Cog):
             color=discord.Color.green()
         )
         
-        embed.set_footer(text=f"They can now use !claimfreepack immediately")
+        embed.set_footer(text=f"They can now use /claimfreepack immediately")
         
         await ctx.send(embed=embed)
     
