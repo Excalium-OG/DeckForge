@@ -98,13 +98,17 @@ class CardCommands(commands.Cog):
         
         return rates
     
-    @commands.command(name='drop')
+    @commands.hybrid_command(name='drop', description="Open packs to get cards")
     async def drop_cards(self, ctx, amount: int = 1, pack_type: str = "Normal Pack"):
         """
         Open packs to get cards. Each pack gives 2 cards.
         Usage: !drop [amount] [pack_type]
         Examples: !drop, !drop 2, !drop 1 "Booster Pack"
         """
+        # Defer if invoked as slash command to avoid timeout
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
@@ -264,12 +268,16 @@ class CardCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='mycards')
+    @commands.hybrid_command(name='mycards', description="View your card collection from this server's deck")
     async def my_cards(self, ctx):
         """
         List all owned cards from this server's deck with pagination. Shows grouped cards by rarity.
         Usage: !mycards
         """
+        # Defer if invoked as slash command to avoid timeout
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
@@ -383,13 +391,17 @@ class CardCommands(commands.Cog):
                     await message.clear_reactions()
                     break
     
-    @commands.command(name='recycle')
+    @commands.hybrid_command(name='recycle', description="Convert duplicate cards into credits based on rarity")
     async def recycle_cards(self, ctx, card_id: int, amount: int = 1):
         """
         Recycle duplicate cards from this server's deck for credits.
         Usage: !recycle [card_id] [amount]
         Example: !recycle 5 3 (recycles 3 copies of card ID 5)
         """
+        # Defer if invoked as slash command to avoid timeout
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         

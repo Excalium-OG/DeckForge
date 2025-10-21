@@ -99,12 +99,16 @@ class PackCommands(commands.Cog):
         
         return True
     
-    @commands.command(name='claimfreepack')
+    @commands.hybrid_command(name='claimfreepack', description="Claim a free Normal Pack (cooldown varies by deck)")
     async def claim_free_pack(self, ctx):
         """
         Claim 1 free Normal Pack based on deck cooldown (default 8 hours).
         Usage: !claimfreepack
         """
+        # Defer if invoked as slash command to avoid timeout
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
@@ -242,7 +246,7 @@ class PackCommands(commands.Cog):
             
             await ctx.send(embed=embed)
     
-    @commands.command(name='buypack')
+    @commands.hybrid_command(name='buypack', description="Purchase packs with credits")
     async def buy_pack(self, ctx, amount: int = 1, pack_type: str = "Normal Pack"):
         """
         Purchase packs with credits.
@@ -251,6 +255,10 @@ class PackCommands(commands.Cog):
         
         Prices: Normal Pack (100c), Booster Pack (300c), Booster Pack+ (500c)
         """
+        # Defer if invoked as slash command to avoid timeout
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         
         # Validate amount
