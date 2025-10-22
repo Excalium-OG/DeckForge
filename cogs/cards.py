@@ -4,6 +4,7 @@ Handles all card-related commands for the trading card bot
 """
 import discord
 from discord.ext import commands
+import asyncio
 import asyncpg
 import uuid
 import random
