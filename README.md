@@ -1,91 +1,47 @@
-# DeckForge - Discord Trading Card Bot
+# 🚀 DeckForge — Customizable Discord Card Platform
 
-A Discord bot for a collectible rocket-themed trading card game with drop mechanics, card management, and admin tools.
+**DeckForge** is a fully customizable Discord-based card platform where users can create, collect, and trade themed decks of their own design — rockets, fantasy, memes, or anything else. Originally built around rocket collectibles, DeckForge has evolved into a flexible system supporting user-defined card templates, rarity tiers, and deck mechanics. Whether you're building a sci-fi arsenal or a meme deck for your server, DeckForge gives you the tools to craft, manage, and share your creations.
 
-## Features (Phase 1)
+---
 
-### Core Commands
-- `!drop` - Claim 2 random cards every 8 hours (uses weighted drop rates)
-- `!mycards` - View your card collection sorted by rarity
-- `!cardinfo [name or ID]` - View detailed card information
-- `!balance` - Check your credit balance
-- `!viewdroprates` - View current drop rate configuration for the server
+## 🧭 Overview
 
-### Future Features (Placeholders)
-- `!recycle [instance_id]` - Recycle cards for credits (Phase 2)
-- `!buycredits [amount]` - Buy credits (Phase 2 - Stripe integration)
-- `!launch [instance_id]` - Launch rocket cards (Phase 2 - gameplay)
+- **Platform**: Discord bot + FastAPI web portal  
+- **Theme**: Fully customizable card decks  
+- **Interface**: Slash commands (`/drop`, `/mycards`, etc.)  
+- **Storage**: PostgreSQL + Replit object storage  
+- **Auth**: Discord OAuth2 (web) + role-based access (bot)
 
-## Setup
+---
 
-### Prerequisites
-- Python 3.11+
-- PostgreSQL database
-- Discord bot application
+## 🚀 Features
 
-### Environment Variables
-- `DECKFORGE_BOT_TOKEN` - Your Discord bot token (required)
-- `DATABASE_URL` - PostgreSQL connection string (auto-configured)
-- `ADMIN_IDS` - Comma-separated Discord user IDs for admins (optional)
+### 🎮 Core Game Mechanics
 
-### Running the Bot
-```bash
-python bot.py
-```
+- **Pack System**: Normal, Booster, and Booster+ packs with rarity multipliers  
+- **Card System**: 7-tier rarity (Common → Mythic), instance-based cards  
+- **Inventory**: Paginated `/mycards` view with total/unique counts  
+- **Recycling**: `/recycle` converts duplicates into credits  
+- **Trading**: Multi-step `/requesttrade` flow with validation and timeout  
 
-## Rarity System
+### 🛠 Admin Tools
 
-Cards are sorted by the following rarity hierarchy:
-1. Common
-2. Uncommon
-3. Exceptional
-4. Rare
-5. Epic
-6. Legendary
-7. Mythic
+- **Deck Management**: Create/edit decks and cards via web portal  
+- **Custom Templates**: Define card fields (text, number, dropdown)  
+- **Cooldown Editor**: Set free pack claim intervals (1–168 hours)  
+- **Drop Rate Editor**: Configure rarity weights (must total 100%)  
 
-### Default Drop Rates
+### 🌐 Web Portal
 
-| Rarity      | Drop Rate |
-|-------------|-----------|
-| Common      | 40%       |
-| Uncommon    | 25%       |
-| Exceptional | 15%       |
-| Rare        | 10%       |
-| Epic        | 6%        |
-| Legendary   | 3%        |
-| Mythic      | 1%        |
+- Built with FastAPI + Jinja2  
+- Discord OAuth2 login  
+- Role-based access: global admins and server managers  
+- Secure image uploads via Replit object storage  
 
-Admins can customize these rates per server using `!setdroprate`. All rates must total 100%.
+---
 
-## Database Schema
+## ⚙️ Setup
 
-- **players** - User profiles, credits, and drop cooldowns
-- **cards** - Master card definitions
-- **user_cards** - Player-owned card instances with UUIDs
-- **drop_rates** - Configurable drop rates per guild (Phase 1.5)
-- **pending_trades** - Future trading system (Phase 2)
+### 🔧 Environment Variables
 
-## Project Structure
-```
-.
-├── bot.py                  # Main bot entry point
-├── cogs/
-│   ├── cards.py           # Core card commands
-│   └── future.py          # Placeholder commands
-├── utils/
-│   ├── card_helpers.py    # Card utility functions
-│   └── drop_helpers.py    # Drop rate utilities
-├── db/
-│   └── migrations/
-│       ├── 0001_cardbot.sql      # Initial schema
-│       └── 0002_drop_rates.sql   # Drop rates config
-└── tests/
-```
-
-## Coming in Phase 2
-- Trading system with confirmation workflow
-- Card recycling with rarity-based credit rewards
-- Stripe microtransactions integration
-- Card battle/launch gameplay mechanics
-- Leaderboards and statistics
+#### Discord Bot
