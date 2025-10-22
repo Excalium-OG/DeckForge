@@ -45,3 +45,46 @@
 ### 🔧 Environment Variables
 
 #### Discord Bot
+DECKFORGE_BOT_TOKEN= DATABASE_URL= ADMIN_IDS=  # comma-separated Discord user IDs
+
+#### Web Admin Portal
+DISCORD_CLIENT_ID= DISCORD_CLIENT_SECRET= SESSION_SECRET= DISCORD_REDIRECT_URI= PRIVATE_OBJECT_DIR=  # e.g., /bucket-name/path
+
+---
+
+## 🧪 Tech Stack
+
+| Layer         | Tools & Libraries                          |
+|--------------|---------------------------------------------|
+| Bot Framework | `discord.py v2.6.4`, `asyncpg`, `dotenv`   |
+| Web Portal    | `FastAPI`, `Uvicorn`, `Authlib`, `Jinja2`  |
+| Storage       | PostgreSQL, Replit object storage          |
+| Auth          | Discord OAuth2                             |
+
+---
+
+## 📄 Command Reference
+
+### Slash Commands
+
+- `/drop`, `/claimfreepack`, `/buypack`, `/mypacks`  
+- `/mycards`, `/recycle`, `/cardinfo` (with autocomplete)  
+- `/balance`, `/buycredits`, `/help`
+
+> Note: Legacy `!` commands are deprecated. All commands now use Discord’s slash interface.
+
+---
+
+## 💡 Planned Features
+
+- Stripe integration for credit purchases  
+- Dedicated image hosting service  
+- Full gameplay mechanics  
+- Advanced trading and marketplace  
+
+---
+
+## 🙋‍♂️ Credits
+
+Created by [Jason](https://github.com/jason1160)  
+Built with ❤️ using Replit, Discord.py, and FastAPI
