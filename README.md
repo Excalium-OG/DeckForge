@@ -86,5 +86,5 @@ DISCORD_CLIENT_ID= DISCORD_CLIENT_SECRET= SESSION_SECRET= DISCORD_REDIRECT_URI= 
 
 ## 🙋‍♂️ Credits
 
-Created by [Jason](https://github.com/jason1160)  
+Created by [Excalium](https://github.com/Excalium-OG)  
 Built with ❤️ using Replit, Discord.py, and FastAPI
