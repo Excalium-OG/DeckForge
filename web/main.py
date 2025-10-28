@@ -567,10 +567,10 @@ async def adopt_deck(deck_id: int, guild_id: int = Form(...), user = Depends(req
                             new_card_id, new_template_id, cf['field_value']
                         )
 
-            # Assign cloned deck to the selected guild
+            # Assign deck to the selected guild
             await conn.execute(
                 "INSERT INTO server_decks (guild_id, deck_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET deck_id = $2",
-                guild_id, new_deck_id
+                guild_id, deck_id
             )
 
     return RedirectResponse(url="/dashboard", status_code=303)
