@@ -46,12 +46,14 @@ Preferred communication style: Simple, everyday language.
 - **Discord Bot**: Admin commands support image uploads via Discord attachments, stored as URLs in the database.
 
 ### Command Design Patterns
-- **Slash Commands**: 10 slash commands implemented using hybrid commands (work as both `/` and `!`):
-  - `/drop`, `/mycards`, `/recycle`, `/claimfreepack`, `/buypack`, `/mypacks` - Hybrid commands
-  - `/cardinfo` (with autocomplete), `/help`, `/balance`, `/buycredits` - Pure slash commands
+- **Slash Commands**: 15 slash commands implemented using hybrid commands (work as both `/` and `!`):
+  - Card commands: `/drop`, `/mycards`, `/recycle` - Hybrid commands
+  - Pack commands: `/claimfreepack`, `/buypack`, `/mypacks` - Hybrid commands
+  - Trading commands: `/requesttrade`, `/accepttrade`, `/tradeadd`, `/traderemove`, `/finalize` - Hybrid commands
+  - Info commands: `/cardinfo` (with autocomplete), `/help`, `/balance`, `/buycredits` - Pure slash commands
 - **Hybrid Command Architecture**: Commands use `ctx.defer()` for slash invocations to prevent 3-second timeout errors
 - **Help System**: Custom help command filters admin-only commands for non-admin users
-- **Error Handling**: Extensive validation checks are performed before database operations
+- **Error Handling**: Global error handlers for both regular and slash commands with detailed logging
 - **User Feedback**: Utilizes rich embeds for card/pack displays and plain text for confirmations
 
 ## External Dependencies

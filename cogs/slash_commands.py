@@ -78,25 +78,18 @@ class SlashCommands(commands.Cog):
         card_id: Optional[int] = None
     ):
         """View detailed information about a specific card by name or ID"""
-        print(f"📋 /cardinfo called - card_name={card_name}, card_id={card_id}, user={interaction.user}")
-        
         # Defer response to prevent timeout
         await interaction.response.defer()
-        print("📋 Response deferred")
         
         guild_id = interaction.guild_id
         
         if not guild_id:
-            print("📋 No guild_id, sending error")
             await interaction.followup.send("❌ This command can only be used in a server!", ephemeral=True)
             return
         
         # Check if server has an assigned deck
-        print(f"📋 Getting server deck for guild {guild_id}")
         deck = await self.bot.get_server_deck(guild_id)
-        print(f"📋 Got deck: {deck}")
         if not deck:
-            print("📋 No deck assigned, sending error")
             await interaction.followup.send(
                 "❌ No deck assigned to this server!\n"
                 "Ask a server manager to assign a deck via the web admin portal.",
@@ -105,7 +98,6 @@ class SlashCommands(commands.Cog):
             return
         
         deck_id = deck['deck_id']
-        print(f"📋 Using deck_id: {deck_id}")
         
         # Must provide either card_name or card_id
         if not card_name and not card_id:
@@ -115,14 +107,11 @@ class SlashCommands(commands.Cog):
             )
             return
         
-        print(f"📋 Acquiring database connection")
         async with self.db_pool.acquire() as conn:
             if card_name:
                 # If card_name is actually a card_id from autocomplete, try parsing it
-                print(f"📋 Trying to parse card_name as ID: {card_name}")
                 try:
                     parsed_id = int(card_name)
-                    print(f"📋 Parsed as ID: {parsed_id}, querying database")
                     card = await conn.fetchrow(
                         """SELECT c.*, 
                            (SELECT COUNT(*) FROM user_cards uc 
@@ -131,10 +120,8 @@ class SlashCommands(commands.Cog):
                            WHERE c.card_id = $1 AND c.deck_id = $3""",
                         parsed_id, interaction.user.id, deck_id
                     )
-                    print(f"📋 Query by ID result: {card}")
                 except (ValueError, TypeError):
                     # Search by name
-                    print(f"📋 Not an ID, searching by name: {card_name}")
                     card = await conn.fetchrow(
                         """SELECT c.*, 
                            (SELECT COUNT(*) FROM user_cards uc 
@@ -144,7 +131,6 @@ class SlashCommands(commands.Cog):
                            LIMIT 1""",
                         card_name, interaction.user.id, deck_id
                     )
-                    print(f"📋 Query by name result: {card}")
             else:
                 # Search by card_id
                 card = await conn.fetchrow(
@@ -157,7 +143,6 @@ class SlashCommands(commands.Cog):
                 )
             
             if not card:
-                print("📋 Card not found, sending error")
                 await interaction.followup.send(
                     "❌ Card not found in this deck!",
                     ephemeral=True
@@ -165,7 +150,6 @@ class SlashCommands(commands.Cog):
                 return
             
             # Get custom template fields for this card
-            print(f"📋 Getting template fields for card {card['card_id']}")
             template_fields = await conn.fetch(
                 """SELECT ctf.field_value, ct.field_name, ct.field_type
                    FROM card_template_fields ctf
@@ -174,15 +158,12 @@ class SlashCommands(commands.Cog):
                    ORDER BY ct.field_order""",
                 card['card_id']
             )
-            print(f"📋 Got {len(template_fields)} template fields")
         
         # Create embed
-        print("📋 Creating card embed")
         embed = create_card_embed(card)
         
         # Add custom template fields
         if template_fields:
-            print(f"📋 Adding {len(template_fields)} custom fields to embed")
             for field in template_fields:
                 embed.add_field(
                     name=field['field_name'],
@@ -197,9 +178,7 @@ class SlashCommands(commands.Cog):
             inline=False
         )
         
-        print("📋 Sending embed response")
         await interaction.followup.send(embed=embed)
-        print("📋 Response sent successfully")
     
     @app_commands.command(name="balance", description="Check your credit balance")
     async def balance(self, interaction: discord.Interaction):

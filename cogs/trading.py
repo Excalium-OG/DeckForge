@@ -148,12 +148,16 @@ class TradingCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='requesttrade')
+    @commands.hybrid_command(name='requesttrade')
     async def request_trade(self, ctx, member: discord.Member):
         """
         Initiate a trade with another user in this server.
         Usage: /requesttrade @user
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         initiator_id = ctx.author.id
         responder_id = member.id
         guild_id = ctx.guild.id if ctx.guild else None
@@ -223,12 +227,16 @@ class TradingCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='accepttrade')
+    @commands.hybrid_command(name='accepttrade')
     async def accept_trade(self, ctx):
         """
         Accept a trade request or confirm your acceptance of the trade terms.
         Usage: /accepttrade
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         
         async with self.db_pool.acquire() as conn:
@@ -328,12 +336,16 @@ class TradingCommands(commands.Cog):
             
             await ctx.send("❌ Invalid trade state. Please contact an admin.")
     
-    @commands.command(name='tradeadd')
+    @commands.hybrid_command(name='tradeadd')
     async def trade_add(self, ctx, card_id: int, amount: int = 1):
         """
         Add cards to your side of the trade.
         Usage: /tradeadd [card_id] [amount]
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
@@ -443,12 +455,16 @@ class TradingCommands(commands.Cog):
             )
             await self.display_trade_pool(ctx, dict(updated_trade))
     
-    @commands.command(name='traderemove')
+    @commands.hybrid_command(name='traderemove')
     async def trade_remove(self, ctx, card_id: int, amount: int = 1):
         """
         Remove cards from your side of the trade.
         Usage: /traderemove [card_id] [amount]
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         
         if amount < 1:
@@ -525,12 +541,16 @@ class TradingCommands(commands.Cog):
             )
             await self.display_trade_pool(ctx, dict(updated_trade))
     
-    @commands.command(name='finalize')
+    @commands.hybrid_command(name='finalize')
     async def finalize_trade(self, ctx):
         """
         Finalize and execute the trade (both players must confirm).
         Usage: /finalize
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
