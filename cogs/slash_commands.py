@@ -78,16 +78,19 @@ class SlashCommands(commands.Cog):
         card_id: Optional[int] = None
     ):
         """View detailed information about a specific card by name or ID"""
+        # Defer response to prevent timeout
+        await interaction.response.defer()
+        
         guild_id = interaction.guild_id
         
         if not guild_id:
-            await interaction.response.send_message("❌ This command can only be used in a server!", ephemeral=True)
+            await interaction.followup.send("❌ This command can only be used in a server!", ephemeral=True)
             return
         
         # Check if server has an assigned deck
         deck = await self.bot.get_server_deck(guild_id)
         if not deck:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ No deck assigned to this server!\n"
                 "Ask a server manager to assign a deck via the web admin portal.",
                 ephemeral=True
@@ -98,7 +101,7 @@ class SlashCommands(commands.Cog):
         
         # Must provide either card_name or card_id
         if not card_name and not card_id:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "❌ Please provide either a card name or card ID!",
                 ephemeral=True
             )
@@ -140,7 +143,7 @@ class SlashCommands(commands.Cog):
                 )
             
             if not card:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "❌ Card not found in this deck!",
                     ephemeral=True
                 )
@@ -175,7 +178,7 @@ class SlashCommands(commands.Cog):
             inline=False
         )
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
     
     @app_commands.command(name="balance", description="Check your credit balance")
     async def balance(self, interaction: discord.Interaction):
