@@ -707,9 +707,11 @@ async def add_card_to_deck(
     description: str = Form(...),
     rarity: str = Form(...),
     image_url: str = Form(None),
+    mergeable: bool = Form(False),
+    max_merge_level: int = Form(10),
     user = Depends(require_admin)
 ):
-    """Add a card to a deck with template field values"""
+    """Add a card to a deck with template field values and merge configuration"""
     pool = await get_db_pool()
     form_data = await request.form()
     
@@ -726,12 +728,12 @@ async def add_card_to_deck(
         if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
             raise HTTPException(status_code=403, detail="You don't own this deck")
         
-        # Insert card with basic fields only
+        # Insert card with basic fields and merge configuration
         card = await conn.fetchrow(
-            """INSERT INTO cards (deck_id, name, description, rarity, image_url, created_by)
-               VALUES ($1, $2, $3, $4, $5, $6)
+            """INSERT INTO cards (deck_id, name, description, rarity, image_url, created_by, mergeable, max_merge_level)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                RETURNING card_id""",
-            deck_id, name, description, rarity, image_url, user['id']
+            deck_id, name, description, rarity, image_url, user['id'], mergeable, max_merge_level
         )
         
         # Get template fields for this deck

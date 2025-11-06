@@ -108,6 +108,24 @@
                 <div id="image-preview" style="margin-top: 10px;"></div>
             </div>
             
+            <h4>Merge Configuration</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" id="mergeable" name="mergeable" value="1">
+                        <span>Mergeable Card</span>
+                    </label>
+                    <small>Allow this card to be merged for progressive upgrades</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="max_merge_level">Max Merge Level</label>
+                    <input type="number" id="max_merge_level" name="max_merge_level" 
+                           value="10" min="1" max="100" placeholder="10">
+                    <small>Maximum level this card can be merged to (default: 10)</small>
+                </div>
+            </div>
+            
             <button type="submit" class="btn btn-primary">Add Card</button>
         </form>
     </div>

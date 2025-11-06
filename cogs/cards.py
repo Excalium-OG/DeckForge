@@ -300,13 +300,14 @@ class CardCommands(commands.Cog):
         
         async with self.db_pool.acquire() as conn:
             # Get all user cards with card details, filtered by server's deck
+            # Group by merge_level to show merged cards separately
             cards = await conn.fetch(
-                """SELECT c.card_id, c.name, c.rarity, COUNT(*) as quantity
+                """SELECT c.card_id, c.name, c.rarity, uc.merge_level, COUNT(*) as quantity
                    FROM user_cards uc
                    JOIN cards c ON uc.card_id = c.card_id
                    WHERE uc.user_id = $1 AND uc.recycled_at IS NULL AND c.deck_id = $2
-                   GROUP BY c.card_id, c.name, c.rarity
-                   ORDER BY c.rarity, c.name""",
+                   GROUP BY c.card_id, c.name, c.rarity, uc.merge_level
+                   ORDER BY c.rarity, c.name, uc.merge_level""",
                 user_id, deck_id
             )
         
@@ -318,14 +319,22 @@ class CardCommands(commands.Cog):
         cards_list = [dict(card) for card in cards]
         sorted_cards = sort_cards_by_rarity(cards_list)
         
-        # Build card lines with quantity
+        # Build card lines with quantity and merge level indicator
+        from utils.merge_helpers import format_merge_level_display
+        
         card_lines = []
         total_count = 0
         for card in sorted_cards:
             qty = card['quantity']
             total_count += qty
+            merge_level = card.get('merge_level', 0)
+            
+            # Format merge level display
+            merge_display = format_merge_level_display(merge_level)
+            merge_suffix = f" {merge_display}" if merge_display else ""
+            
             prefix = f"(x{qty})" if qty > 1 else ""
-            card_lines.append(f"{prefix} **{card['name']}** (ID: {card['card_id']})".strip())
+            card_lines.append(f"{prefix} **{card['name']}**{merge_suffix} (ID: {card['card_id']})".strip())
         
         # Paginate: 8 lines per page
         lines_per_page = 8

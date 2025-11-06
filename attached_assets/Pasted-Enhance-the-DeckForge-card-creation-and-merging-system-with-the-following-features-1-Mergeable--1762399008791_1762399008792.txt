@@ -1,0 +1,55 @@
+Enhance the DeckForge card creation and merging system with the following features:
+
+1. Mergeable Attribute
+   - Add a boolean toggle field `mergeable` when creating a new card.
+   - If true, the card can participate in merge operations.
+   - All mergeable cards start at merge_level = 0.
+
+2. Merge Levels
+   - Add an integer field `max_merge_level` (default 10, configurable per card).
+   - Track current `merge_level` per card instance.
+   - Merging requires 2 cards of the same ID and same merge_level.
+   - Pyramid logic: to reach level L, requires 2^L base cards.
+
+3. Merge Perks
+   - Add a new field `merge_perks` to card templates.
+   - `merge_perks` is a list of integer-based characteristics already defined in the card template (e.g., Strength, Payload Capacity).
+   - On the **first merge (level 0 → 1)**, the player must choose one perk from `merge_perks`.
+   - That perk is locked to the card and becomes its growth path.
+   - On subsequent merges, the same perk is automatically boosted.
+
+4. Perk Scaling
+   - Perk boost follows diminishing returns:
+     - Base boost = P0 (e.g., +10)
+     - Each new level adds P0 * d^(L-1), where d < 1 (e.g., 0.85).
+   - Example: Level 1 = +10, Level 2 = +8.5, Level 3 = +7.2, etc.
+   - Store applied perks in a `card_perks` table with fields: card_id, level_applied, characteristic_name, perk_value.
+
+5. Merge Costs
+   - Use the rarity based recycle value as the cost of the first card merge
+   - Merge cost scales exponentially:
+     - Cost(L) = C0 * r^L, where C0 = base cost, r = scaling factor (e.g., 1.25).
+   - Deduct credits from user balance on each merge.
+
+6. Discord Integration
+   - Add a Discord command `/merge` that:
+     - Accepts two card IDs of the same merge_level.
+     - Validates eligibility (mergeable, same level, credits available).
+     - On first merge, prompts the user to select a perk from `merge_perks`.
+     - On subsequent merges, automatically applies the locked perk boost.
+     - Returns a confirmation message with new merge_level, perk applied, and updated stats.
+     - When viewing /mycards, cards are displayed differently by merge_level
+     - /cardinfo will now have an optional merge_level field which will display the card with listed merge level as well as the perk boost, if applicable
+
+7. Database Changes
+   - `cards` table: add fields `mergeable`, `merge_level`, `max_merge_level`, `locked_perk`.
+   - `card_perks` table: track perk progression per merge level.
+   - Ensure transactions are atomic to prevent duplicate merges.
+
+8. UI / Templates
+   - In the card creation form, add:
+     - Checkbox for "Mergeable"
+     - Numeric input for "Max Merge Level" (default 10)
+   - Display merge_perks options when mergeable is checked.
+
+Goal: Players can create mergeable cards, select a perk path at the first merge, and progressively upgrade that perk through merging, with costs and boosts scaling according to the formulas above.

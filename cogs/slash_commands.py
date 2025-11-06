@@ -68,14 +68,16 @@ class SlashCommands(commands.Cog):
     @app_commands.command(name="cardinfo", description="View detailed information about a specific card")
     @app_commands.describe(
         card_name="The name of the card to look up",
-        card_id="Or the card ID number to look up"
+        card_id="Or the card ID number to look up",
+        merge_level="Optional: Show stats for a specific merge level"
     )
     @app_commands.autocomplete(card_name=card_name_autocomplete)
     async def cardinfo(
         self,
         interaction: discord.Interaction,
         card_name: Optional[str] = None,
-        card_id: Optional[int] = None
+        card_id: Optional[int] = None,
+        merge_level: Optional[int] = None
     ):
         """View detailed information about a specific card by name or ID"""
         # Defer response to prevent timeout
@@ -171,12 +173,78 @@ class SlashCommands(commands.Cog):
                     inline=True
                 )
         
-        # Add ownership info
-        embed.add_field(
-            name="You Own",
-            value=f"{card['owned_count']} copies",
-            inline=False
-        )
+        # Add merge information if card is mergeable
+        async with self.db_pool.acquire() as conn:
+            if card.get('mergeable'):
+                # Get merge level breakdown
+                merge_counts = await conn.fetch(
+                    """SELECT merge_level, COUNT(*) as count
+                       FROM user_cards
+                       WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL
+                       GROUP BY merge_level
+                       ORDER BY merge_level""",
+                    interaction.user.id, card['card_id']
+                )
+                
+                from utils.merge_helpers import format_merge_level_display, calculate_cumulative_perk_boost
+                
+                if merge_counts:
+                    merge_text = "\n".join([
+                        f"Level {mc['merge_level']} {format_merge_level_display(mc['merge_level'])}: {mc['count']}x"
+                        for mc in merge_counts
+                    ])
+                    embed.add_field(
+                        name=f"You Own ({card['owned_count']} total)",
+                        value=merge_text,
+                        inline=False
+                    )
+                    
+                    # If merge_level specified, show perk boost information
+                    if merge_level is not None:
+                        # Get perk boost for this merge level
+                        from utils.merge_helpers import get_merge_perks_for_deck
+                        
+                        merge_perks = await get_merge_perks_for_deck(conn, deck_id)
+                        
+                        if merge_perks and merge_level > 0:
+                            embed.add_field(
+                                name=f"🌟 Merge Level {merge_level} Boosts",
+                                value="Shows potential boosts if merged to this level",
+                                inline=False
+                            )
+                            
+                            for perk in merge_perks:
+                                perk_name = perk['perk_name']
+                                base_boost = perk['base_boost']
+                                diminishing_factor = perk['diminishing_factor']
+                                
+                                cumulative_boost = calculate_cumulative_perk_boost(
+                                    base_boost, merge_level, diminishing_factor
+                                )
+                                
+                                embed.add_field(
+                                    name=f"• {perk_name}",
+                                    value=f"+{cumulative_boost}",
+                                    inline=True
+                                )
+                        elif merge_level == 0:
+                            embed.add_field(
+                                name="📝 Note",
+                                value="This is the base card (no merge boosts)",
+                                inline=False
+                            )
+                else:
+                    embed.add_field(
+                        name="You Own",
+                        value=f"{card['owned_count']} copies",
+                        inline=False
+                    )
+            else:
+                embed.add_field(
+                    name="You Own",
+                    value=f"{card['owned_count']} copies",
+                    inline=False
+                )
         
         await interaction.followup.send(embed=embed)
     

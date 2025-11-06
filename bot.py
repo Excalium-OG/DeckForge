@@ -62,6 +62,7 @@ class DeckForgeBot(commands.Bot):
         await self.load_extension('cogs.cards')
         await self.load_extension('cogs.packs')
         await self.load_extension('cogs.trading')
+        await self.load_extension('cogs.merge')  # Card merge system
         await self.load_extension('cogs.future')
         await self.load_extension('cogs.slash_commands')  # Slash command support
         print("✅ Loaded all cogs")
@@ -75,7 +76,8 @@ class DeckForgeBot(commands.Bot):
             'db/migrations/0004_phase2_extensions.sql',
             'db/migrations/0005_web_admin.sql',
             'db/migrations/0006_oauth_states.sql',
-            'db/migrations/0007_card_templates.sql'
+            'db/migrations/0007_card_templates.sql',
+            'db/migrations/0008_merge_system.sql'
         ]
         
         async with self.db_pool.acquire() as conn:

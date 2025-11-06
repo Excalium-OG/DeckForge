@@ -18,23 +18,32 @@ Preferred communication style: Simple, everyday language.
 
 ### Data Layer
 - **Database**: PostgreSQL is used for all persistent storage, managed with `asyncpg` for asynchronous operations and connection pooling.
-- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, `rarity_ranges`, `card_templates`, `card_template_fields`, and `server_settings`. `user_cards` uses UUIDs for unique instance tracking.
+- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, `rarity_ranges`, `card_templates`, `card_template_fields`, `server_settings`, `card_perks`, and `deck_merge_perks`. `user_cards` uses UUIDs for unique instance tracking with merge level tracking.
 - **Custom Card Templates**: The `card_templates` table stores custom field definitions per deck (field name, type, required flag, display order), while `card_template_fields` stores actual field values for each card. Supports text, number, and dropdown field types.
 - **Server Settings**: The `server_settings` table stores per-server configurations including active deck assignments and customizations.
+- **Merge System**: The `card_perks` table tracks perk progression history for merged cards, while `deck_merge_perks` defines available merge perks and their scaling parameters per deck. Cards have `mergeable` and `max_merge_level` attributes, while user card instances track `merge_level` and `locked_perk`.
 
 ### Core Game Mechanics
 - **Pack System**: Three pack types (Normal, Booster, Booster+). Users can claim a free Normal Pack every 8 hours or purchase packs with credits. Packs have a 30-item inventory limit, and Booster Packs apply rarity multipliers.
-- **Card System**: Seven-tier rarity system (Common to Mythic) with configurable weighted drop rates per guild. Cards are instance-based (UUID) and sorted by rarity then alphabetically.
-- **Inventory Management**: `/mycards` command groups identical cards, supports pagination with reaction-based navigation, and displays total/unique card counts.
+- **Card System**: Seven-tier rarity system (Common to Mythic) with configurable weighted drop rates per guild. Cards are instance-based (UUID) and sorted by rarity then alphabetically. Cards can be designated as mergeable with configurable max merge levels.
+- **Card Merge System**: Progressive card upgrading through merge operations. Mergeable cards can be combined (2 cards of same type and level → 1 card of next level). Features include:
+  - **Perk Selection**: On first merge (level 0→1), players select a characteristic to boost from available merge perks
+  - **Perk Locking**: Selected perk is locked for all future merges of that card instance
+  - **Diminishing Returns**: Perk boosts follow formula `Boost(L) = P0 * d^(L-1)` where P0 is base boost and d is diminishing factor (default 0.85)
+  - **Pyramid Scaling**: Requires 2^L base cards to reach level L
+  - **Exponential Costs**: Merge cost follows `Cost(L) = C0 * 1.25^L` where C0 is rarity-based recycle value
+  - **Visual Indicators**: Merge levels displayed as stars (★) for levels 1-5 or +L for higher levels
+- **Inventory Management**: `/mycards` command groups cards by card ID and merge level, supports pagination with reaction-based navigation, and displays total/unique card counts with merge level indicators.
 - **Card Recycling**: `/recycle` command allows users to convert duplicate cards into credits based on rarity. Cards are soft-deleted via a `recycled_at` timestamp.
 - **Player-to-Player Trading**: A multi-step `/requesttrade` system with `/tradeadd`/`/traderemove`, `/accepttrade`, and `/finalize` commands. Trades have a 5-minute timeout and include safety features like inventory validation and atomic transfers.
 
 ### Web Admin Portal Features
 - **Dashboard**: Displays user info, managed Discord servers, assigned decks, and user-created decks.
 - **Deck Management**: Allows creation, editing (adding/deleting cards with detailed specifications), and viewing of cards within a deck.
+- **Card Merge Configuration**: When creating cards, deck owners can designate cards as mergeable and set max merge levels (1-100, default 10).
 - **Rarity Rate Editor**: Configurable drop rates per rarity tier for decks, with real-time validation to ensure rates sum to 100%.
 - **Image Upload**: Direct file upload from client device using Replit object storage with presigned URLs for secure, scalable image hosting.
-- **Custom Card Templates**: Define custom field schemas for each deck with field name, type (text/number/dropdown), required flag, and display order. Card creation forms dynamically adapt to the deck's template.
+- **Custom Card Templates**: Define custom field schemas for each deck with field name, type (text/number/dropdown), required flag, and display order. Card creation forms dynamically adapt to the deck's template. Template fields can be designated as merge perks for progressive upgrades.
 - **Free Pack Cooldown Editor**: Configurable 1-168 hour cooldowns per deck for free pack claims, allowing deck creators to customize pack distribution rates.
 
 ### Image & Asset Management
@@ -46,11 +55,11 @@ Preferred communication style: Simple, everyday language.
 - **Discord Bot**: Admin commands support image uploads via Discord attachments, stored as URLs in the database.
 
 ### Command Design Patterns
-- **Slash Commands**: 15 slash commands implemented using hybrid commands (work as both `/` and `!`):
-  - Card commands: `/drop`, `/mycards`, `/recycle` - Hybrid commands
+- **Slash Commands**: 16 slash commands implemented using hybrid commands (work as both `/` and `!`):
+  - Card commands: `/drop`, `/mycards`, `/recycle`, `/merge` - Hybrid commands
   - Pack commands: `/claimfreepack`, `/buypack`, `/mypacks` - Hybrid commands
   - Trading commands: `/requesttrade`, `/accepttrade`, `/tradeadd`, `/traderemove`, `/finalize` - Hybrid commands
-  - Info commands: `/cardinfo` (with autocomplete), `/help`, `/balance`, `/buycredits` - Pure slash commands
+  - Info commands: `/cardinfo` (with autocomplete and optional merge_level parameter), `/help`, `/balance`, `/buycredits` - Pure slash commands
 - **Hybrid Command Architecture**: Commands use `ctx.defer()` for slash invocations to prevent 3-second timeout errors
 - **Help System**: Custom help command filters admin-only commands for non-admin users
 - **Error Handling**: Global error handlers for both regular and slash commands with detailed logging
