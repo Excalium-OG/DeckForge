@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}DeckForge Admin Portal{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=2025101701">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}?v=2025101701">
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <h1 class="logo">🚀 DeckForge Admin</h1>
+            <h1 class="logo">DeckForge</h1>
             {% if user %}
             <div class="nav-user">
                 <span>{{ user.username }}#{{ user.discriminator }}</span>
@@ -24,7 +24,7 @@
     </main>
 
     <footer>
-        <p>&copy; 2025 DeckForge | Collectible Rocket Trading Cards</p>
+        <p>&copy; 2025 DeckForge | Custom Trading Card Decks</p>
     </footer>
 
     {% block scripts %}{% endblock %}

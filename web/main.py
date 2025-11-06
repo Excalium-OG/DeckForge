@@ -11,7 +11,8 @@ from starlette.middleware.sessions import SessionMiddleware
 import httpx
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
-from object_storage import ObjectStorageService
+from web.object_storage import ObjectStorageService
+from fastapi.staticfiles import StaticFiles as BaseStaticFiles
 
 # Initialize FastAPI app
 app = FastAPI(title="DeckForge Admin Portal")
@@ -25,7 +26,7 @@ app.add_middleware(
 )
 
 # Mount static files and templates with no-cache headers
-from fastapi.staticfiles import StaticFiles as BaseStaticFiles
+
 
 class NoCacheStaticFiles(BaseStaticFiles):
     def __init__(self, *args, **kwargs):
