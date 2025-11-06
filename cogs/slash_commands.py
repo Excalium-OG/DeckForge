@@ -171,7 +171,7 @@ class SlashCommands(commands.Cog):
                    FROM card_template_fields ctf
                    JOIN card_templates ct ON ctf.template_id = ct.template_id
                    WHERE ctf.card_id = $1
-                   ORDER BY ct.display_order""",
+                   ORDER BY ct.field_order""",
                 card['card_id']
             )
             print(f"📋 Got {len(template_fields)} template fields")
