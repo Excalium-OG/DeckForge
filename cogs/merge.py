@@ -27,19 +27,140 @@ class MergeCommands(commands.Cog):
         self.bot = bot
         self.db_pool: asyncpg.Pool = bot.db_pool
     
+    async def card_name_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> List[app_commands.Choice[str]]:
+        """
+        Autocomplete for card names - shows cards the player has 2+ of
+        Groups by card_id, merge_level, and locked_perk to find truly mergeable pairs
+        """
+        user_id = interaction.user.id
+        guild_id = interaction.guild_id if interaction.guild else None
+        
+        if not guild_id:
+            return []
+        
+        # Get server's deck
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            return []
+        
+        deck_id = deck['deck_id']
+        
+        async with self.db_pool.acquire() as conn:
+            # Get cards the player has 2+ of at the same merge level AND locked perk
+            # For level 0 cards, locked_perk will be NULL and they can merge together
+            # For level 1+, locked_perk must match
+            mergeable_cards = await conn.fetch(
+                """
+                SELECT 
+                    c.card_id,
+                    c.name,
+                    uc.merge_level,
+                    uc.locked_perk,
+                    COUNT(*) as count
+                FROM user_cards uc
+                JOIN cards c ON uc.card_id = c.card_id
+                WHERE uc.user_id = $1 
+                  AND c.deck_id = $2
+                  AND uc.recycled_at IS NULL
+                  AND c.mergeable = TRUE
+                GROUP BY c.card_id, c.name, uc.merge_level, uc.locked_perk
+                HAVING COUNT(*) >= 2
+                ORDER BY c.name, uc.merge_level
+                """,
+                user_id, deck_id
+            )
+            
+            # Build choices with merge level and perk indicator
+            choices = []
+            for card in mergeable_cards:
+                card_name = card['name']
+                merge_level = card['merge_level']
+                locked_perk = card['locked_perk']
+                count = card['count']
+                
+                # Add merge level indicator to display
+                display_level = format_merge_level_display(merge_level)
+                
+                # Add perk indicator if level > 0
+                if merge_level > 0 and locked_perk:
+                    display_name = f"{card_name} {display_level} [{locked_perk}] (x{count})"
+                    # Store card_name|merge_level|perk for lookup
+                    value = f"{card_name}|{merge_level}|{locked_perk}"
+                else:
+                    display_name = f"{card_name} {display_level} (x{count})"
+                    # Store card_name|merge_level for level 0 cards
+                    value = f"{card_name}|{merge_level}|"
+                
+                # Filter based on current input
+                if current.lower() in card_name.lower():
+                    choices.append(app_commands.Choice(name=display_name, value=value))
+            
+            # Return max 25 choices (Discord limit)
+            return choices[:25]
+    
+    async def perk_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> List[app_commands.Choice[str]]:
+        """Autocomplete for perk names - shows available perks for the deck"""
+        guild_id = interaction.guild_id if interaction.guild else None
+        
+        if not guild_id:
+            return []
+        
+        # Get server's deck
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            return []
+        
+        deck_id = deck['deck_id']
+        
+        async with self.db_pool.acquire() as conn:
+            # Get available perks for this deck
+            perks = await conn.fetch(
+                """
+                SELECT perk_name, base_boost
+                FROM deck_merge_perks
+                WHERE deck_id = $1
+                ORDER BY perk_name
+                """,
+                deck_id
+            )
+            
+            choices = []
+            for perk in perks:
+                perk_name = perk['perk_name']
+                base_boost = perk['base_boost']
+                
+                # Filter based on current input
+                if current.lower() in perk_name.lower():
+                    display_name = f"{perk_name} (+{base_boost})"
+                    choices.append(app_commands.Choice(name=display_name, value=perk_name))
+            
+            return choices[:25]
+    
     @commands.hybrid_command(name='merge')
-    async def merge_cards(self, ctx, card_instance_1: str, card_instance_2: str, perk: Optional[str] = None):
+    @app_commands.describe(
+        card_name='The card to merge (you need 2+ at the same level)',
+        perk='For first merge only - the perk to lock for future merges'
+    )
+    @app_commands.autocomplete(card_name=card_name_autocomplete, perk=perk_autocomplete)
+    async def merge_cards(self, ctx, card_name: str, perk: Optional[str] = None):
         """
         Merge two cards of the same type and level to create a more powerful card
         
         Args:
-            card_instance_1: First card instance ID (UUID)
-            card_instance_2: Second card instance ID (UUID)
+            card_name: Name of the card to merge (with autocomplete support)
             perk: For first merge only - the perk to lock for future merges
         
         Usage:
-            /merge <instance_id_1> <instance_id_2>
-            /merge <instance_id_1> <instance_id_2> <perk_name>
+            /merge <card_name>
+            /merge <card_name> <perk_name>
         """
         # Defer for slash commands
         if ctx.interaction:
@@ -63,29 +184,158 @@ class MergeCommands(commands.Cog):
         
         deck_id = deck['deck_id']
         
-        # Validate UUIDs
-        try:
-            instance_uuid_1 = uuid.UUID(card_instance_1)
-            instance_uuid_2 = uuid.UUID(card_instance_2)
-        except ValueError:
-            await ctx.send("❌ Invalid card instance ID format! Use valid UUID.")
-            return
+        # Parse card_name|merge_level|locked_perk from autocomplete value
+        # Format: "card_name|merge_level|locked_perk" (locked_perk is empty string for level 0)
+        target_merge_level = None
+        target_locked_perk = None
+        
+        if '|' in card_name:
+            parts = card_name.rsplit('|', 2)
+            if len(parts) == 3:
+                actual_card_name, merge_level_str, perk_str = parts
+                try:
+                    target_merge_level = int(merge_level_str)
+                    target_locked_perk = perk_str if perk_str else None
+                except ValueError:
+                    actual_card_name = card_name
+            else:
+                actual_card_name = card_name
+        else:
+            actual_card_name = card_name
         
         async with self.db_pool.acquire() as conn:
-            # Validate merge eligibility
-            is_valid, error_msg, card_data = await validate_merge_eligibility(
-                conn, str(instance_uuid_1), str(instance_uuid_2), user_id
+            # Get the card info
+            card_info = await conn.fetchrow(
+                """
+                SELECT card_id, name, rarity, mergeable, max_merge_level
+                FROM cards
+                WHERE deck_id = $1 AND LOWER(name) = LOWER($2)
+                """,
+                deck_id, actual_card_name
             )
             
-            if not is_valid:
-                await ctx.send(f"❌ {error_msg}")
+            if not card_info:
+                await ctx.send(f"❌ Card **{actual_card_name}** not found in this deck!")
                 return
             
-            current_level = card_data['merge_level']
+            if not card_info['mergeable']:
+                await ctx.send(f"❌ **{card_info['name']}** is not a mergeable card!")
+                return
+            
+            card_id = card_info['card_id']
+            card_name_display = card_info['name']
+            rarity = card_info['rarity']
+            max_merge_level = card_info['max_merge_level']
+            
+            # Find all instances of this card the player owns
+            # CRITICAL: Must match both merge_level AND locked_perk to avoid consuming mismatched perks
+            if target_merge_level is not None:
+                # Autocomplete provided specific merge level and locked perk
+                if target_locked_perk is not None:
+                    # Level 1+ with locked perk
+                    instances = await conn.fetch(
+                        """
+                        SELECT instance_id, merge_level, locked_perk
+                        FROM user_cards
+                        WHERE user_id = $1 
+                          AND card_id = $2 
+                          AND recycled_at IS NULL
+                          AND merge_level = $3
+                          AND locked_perk = $4
+                        ORDER BY acquired_at
+                        LIMIT 2
+                        """,
+                        user_id, card_id, target_merge_level, target_locked_perk
+                    )
+                else:
+                    # Level 0 cards (no locked perk yet)
+                    instances = await conn.fetch(
+                        """
+                        SELECT instance_id, merge_level, locked_perk
+                        FROM user_cards
+                        WHERE user_id = $1 
+                          AND card_id = $2 
+                          AND recycled_at IS NULL
+                          AND merge_level = $3
+                          AND locked_perk IS NULL
+                        ORDER BY acquired_at
+                        LIMIT 2
+                        """,
+                        user_id, card_id, target_merge_level
+                    )
+            else:
+                # Find the most common merge level+perk combination with 2+ cards
+                instances = await conn.fetch(
+                    """
+                    WITH perk_counts AS (
+                        SELECT merge_level, locked_perk, COUNT(*) as count
+                        FROM user_cards
+                        WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL
+                        GROUP BY merge_level, locked_perk
+                        HAVING COUNT(*) >= 2
+                        ORDER BY merge_level DESC, count DESC
+                        LIMIT 1
+                    )
+                    SELECT uc.instance_id, uc.merge_level, uc.locked_perk
+                    FROM user_cards uc
+                    JOIN perk_counts pc ON uc.merge_level = pc.merge_level 
+                        AND (uc.locked_perk = pc.locked_perk OR (uc.locked_perk IS NULL AND pc.locked_perk IS NULL))
+                    WHERE uc.user_id = $1 AND uc.card_id = $2 AND uc.recycled_at IS NULL
+                    ORDER BY uc.acquired_at
+                    LIMIT 2
+                    """,
+                    user_id, card_id
+                )
+            
+            if len(instances) < 2:
+                # Build helpful error message
+                if target_merge_level is not None and target_locked_perk:
+                    error_msg = (
+                        f"❌ You need at least **2** copies of **{card_name_display}** at merge level **{target_merge_level}** "
+                        f"with **{target_locked_perk}** perk locked!\n"
+                        f"Use `/mycards` to check your collection."
+                    )
+                else:
+                    error_msg = (
+                        f"❌ You need at least **2** copies of **{card_name_display}** at the same merge level "
+                        f"(and same locked perk if level 1+) to merge!\n"
+                        f"Use `/mycards` to check your collection."
+                    )
+                await ctx.send(error_msg)
+                return
+            
+            # Get the two instances to merge
+            instance_uuid_1 = str(instances[0]['instance_id'])
+            instance_uuid_2 = str(instances[1]['instance_id'])
+            current_level = instances[0]['merge_level']
             next_level = current_level + 1
-            rarity = card_data['rarity']
-            card_name = card_data['name']
-            card_id = card_data['card_id']
+            
+            # Check if already at max level
+            if current_level >= max_merge_level:
+                await ctx.send(
+                    f"❌ **{card_name_display}** is already at max merge level ({max_merge_level})!"
+                )
+                return
+            
+            # Validate that both cards have the same merge level and locked perk (should be guaranteed by query)
+            if instances[0]['merge_level'] != instances[1]['merge_level']:
+                await ctx.send(
+                    f"❌ Cannot merge cards at different merge levels!\n"
+                    f"Both cards must be at the same level."
+                )
+                return
+            
+            # CRITICAL: For level 1+, ensure locked perks match
+            if current_level > 0:
+                perk1 = instances[0]['locked_perk']
+                perk2 = instances[1]['locked_perk']
+                if perk1 != perk2:
+                    await ctx.send(
+                        f"❌ Cannot merge cards with different locked perks!\n"
+                        f"Card 1 has **{perk1}** locked, Card 2 has **{perk2}** locked.\n"
+                        f"You can only merge cards that share the same perk progression path."
+                    )
+                    return
             
             # Calculate merge cost
             merge_cost = calculate_merge_cost(rarity, current_level)
@@ -123,9 +373,9 @@ class MergeCommands(commands.Cog):
                     perk_list = "\n".join([f"• **{p['perk_name']}** (Base boost: +{p['base_boost']})" for p in available_perks])
                     await ctx.send(
                         f"🎯 **First Merge - Perk Selection Required**\n\n"
-                        f"Choose a perk to lock for all future merges of this card:\n\n"
+                        f"Choose a perk to lock for all future merges of **{card_name_display}**:\n\n"
                         f"{perk_list}\n\n"
-                        f"Usage: `/merge {card_instance_1} {card_instance_2} <perk_name>`"
+                        f"Usage: `/merge {card_name_display} <perk_name>`"
                     )
                     return
                 
@@ -149,7 +399,14 @@ class MergeCommands(commands.Cog):
                 diminishing_factor = selected_perk['diminishing_factor']
             else:
                 # Use locked perk from first card
-                locked_perk = card_data['locked_perk']
+                locked_perk = instances[0]['locked_perk']
+                
+                if not locked_perk:
+                    await ctx.send(
+                        f"❌ Card has no locked perk! This should not happen.\n"
+                        f"Please contact a server admin."
+                    )
+                    return
                 
                 # Get perk configuration
                 perk_config = await conn.fetchrow(
@@ -186,7 +443,7 @@ class MergeCommands(commands.Cog):
                     """UPDATE user_cards
                        SET merge_level = $1, locked_perk = $2
                        WHERE instance_id = $3""",
-                    next_level, locked_perk, instance_uuid_1
+                    next_level, locked_perk, uuid.UUID(instance_uuid_1)
                 )
                 
                 # Recycle the second card (soft delete)
@@ -194,20 +451,20 @@ class MergeCommands(commands.Cog):
                     """UPDATE user_cards
                        SET recycled_at = NOW()
                        WHERE instance_id = $1""",
-                    instance_uuid_2
+                    uuid.UUID(instance_uuid_2)
                 )
                 
                 # Record perk application
                 await conn.execute(
                     """INSERT INTO card_perks (instance_id, level_applied, characteristic_name, perk_value)
                        VALUES ($1, $2, $3, $4)""",
-                    instance_uuid_1, next_level, locked_perk, perk_boost
+                    uuid.UUID(instance_uuid_1), next_level, locked_perk, perk_boost
                 )
             
             # Create success embed
             embed = discord.Embed(
                 title="✨ Merge Successful!",
-                description=f"**{card_name}** {format_merge_level_display(current_level)} → {format_merge_level_display(next_level)}",
+                description=f"**{card_name_display}** {format_merge_level_display(current_level)} → {format_merge_level_display(next_level)}",
                 color=discord.Color.green()
             )
             
@@ -242,7 +499,7 @@ class MergeCommands(commands.Cog):
             )
             
             # Calculate next merge cost
-            if next_level < card_data['max_merge_level']:
+            if next_level < max_merge_level:
                 next_merge_cost = calculate_merge_cost(rarity, next_level)
                 embed.add_field(
                     name="Next Merge Cost",
@@ -256,7 +513,7 @@ class MergeCommands(commands.Cog):
                     inline=False
                 )
             
-            embed.set_footer(text=f"Card Instance: {instance_uuid_1}")
+            embed.set_footer(text=f"Merged instances: {instance_uuid_1} + {instance_uuid_2}")
             
             await ctx.send(embed=embed)
 

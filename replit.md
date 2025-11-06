@@ -28,7 +28,8 @@ Preferred communication style: Simple, everyday language.
 - **Card System**: Seven-tier rarity system (Common to Mythic) with configurable weighted drop rates per guild. Cards are instance-based (UUID) and sorted by rarity then alphabetically. Cards can be designated as mergeable with configurable max merge levels.
 - **Card Merge System**: Progressive card upgrading through merge operations. Mergeable cards can be combined (2 cards of same type and level → 1 card of next level). Features include:
   - **Perk Selection**: On first merge (level 0→1), players select a characteristic to boost from available merge perks
-  - **Perk Locking**: Selected perk is locked for all future merges of that card instance
+  - **Perk Locking**: Selected perk is locked for all future merges of that card instance. Cards with different locked perks cannot be merged together, preserving distinct progression paths.
+  - **Smart Autocomplete**: The `/merge` command autocomplete groups cards by card_id, merge_level, AND locked_perk, showing only valid mergeable pairs. For level 1+ cards, displays perk indicator in autocomplete: "Card Name ★ [Perk] (x2)"
   - **Diminishing Returns**: Perk boosts follow formula `Boost(L) = P0 * d^(L-1)` where P0 is base boost and d is diminishing factor (default 0.85)
   - **Pyramid Scaling**: Requires 2^L base cards to reach level L
   - **Exponential Costs**: Merge cost follows `Cost(L) = C0 * 1.25^L` where C0 is rarity-based recycle value
@@ -56,10 +57,11 @@ Preferred communication style: Simple, everyday language.
 
 ### Command Design Patterns
 - **Slash Commands**: 16 slash commands implemented using hybrid commands (work as both `/` and `!`):
-  - Card commands: `/drop`, `/mycards`, `/recycle`, `/merge` - Hybrid commands
+  - Card commands: `/drop`, `/mycards`, `/recycle`, `/merge` (with autocomplete for card_name and perk_name) - Hybrid commands
   - Pack commands: `/claimfreepack`, `/buypack`, `/mypacks` - Hybrid commands
   - Trading commands: `/requesttrade`, `/accepttrade`, `/tradeadd`, `/traderemove`, `/finalize` - Hybrid commands
   - Info commands: `/cardinfo` (with autocomplete and optional merge_level parameter), `/help`, `/balance`, `/buycredits` - Pure slash commands
+- **Autocomplete Support**: Commands like `/merge` and `/cardinfo` use Discord's autocomplete feature to show relevant choices as users type
 - **Hybrid Command Architecture**: Commands use `ctx.defer()` for slash invocations to prevent 3-second timeout errors
 - **Help System**: Custom help command filters admin-only commands for non-admin users
 - **Error Handling**: Global error handlers for both regular and slash commands with detailed logging
