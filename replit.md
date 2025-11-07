@@ -36,7 +36,12 @@ Preferred communication style: Simple, everyday language.
   - **Visual Indicators**: Merge levels displayed as stars (★) for levels 1-5 or +L for higher levels
 - **Inventory Management**: `/mycards` command groups cards by card ID and merge level, supports pagination with reaction-based navigation, and displays total/unique card counts with merge level indicators.
 - **Card Recycling**: `/recycle` command allows users to convert duplicate cards into credits based on rarity. Cards are soft-deleted via a `recycled_at` timestamp.
-- **Player-to-Player Trading**: A multi-step `/requesttrade` system with `/tradeadd`/`/traderemove`, `/accepttrade`, and `/finalize` commands. Trades have a 5-minute timeout and include safety features like inventory validation and atomic transfers.
+- **Player-to-Player Trading**: A multi-step `/requesttrade` system with `/tradeadd`/`/traderemove`, `/accepttrade`, and `/finalize` commands. Features include:
+  - **Merge Level Tracking**: Cards with different merge levels are tracked separately in trades, allowing players to specify which level they want to trade
+  - **Smart Autocomplete**: `/tradeadd` shows owned cards with merge level indicators ("Card Name ★ (x3)"), `/traderemove` shows only cards currently in the trade
+  - **Inventory Validation**: Verifies card ownership at specific merge levels before allowing trades
+  - **Atomic Transfers**: All card transfers happen in a single transaction to prevent data loss
+  - **Safety Features**: 5-minute timeout, deck validation, and automatic acceptance reset when trade pool changes
 
 ### Web Admin Portal Features
 - **Dashboard**: Displays user info, managed Discord servers, assigned decks, and user-created decks.
@@ -59,9 +64,9 @@ Preferred communication style: Simple, everyday language.
 - **Slash Commands**: 16 slash commands implemented using hybrid commands (work as both `/` and `!`):
   - Card commands: `/drop`, `/mycards`, `/recycle`, `/merge` (with autocomplete for card_name and perk_name) - Hybrid commands
   - Pack commands: `/claimfreepack`, `/buypack`, `/mypacks` - Hybrid commands
-  - Trading commands: `/requesttrade`, `/accepttrade`, `/tradeadd`, `/traderemove`, `/finalize` - Hybrid commands
+  - Trading commands: `/requesttrade`, `/accepttrade`, `/tradeadd` (with autocomplete for card_name), `/traderemove` (with autocomplete for card_name), `/finalize` - Hybrid commands
   - Info commands: `/cardinfo` (with autocomplete and optional merge_level parameter), `/help`, `/balance`, `/buycredits` - Pure slash commands
-- **Autocomplete Support**: Commands like `/merge` and `/cardinfo` use Discord's autocomplete feature to show relevant choices as users type
+- **Autocomplete Support**: Commands like `/merge`, `/tradeadd`, `/traderemove`, and `/cardinfo` use Discord's autocomplete feature to show relevant choices as users type, with merge level indicators where applicable
 - **Hybrid Command Architecture**: Commands use `ctx.defer()` for slash invocations to prevent 3-second timeout errors
 - **Help System**: Custom help command filters admin-only commands for non-admin users
 - **Error Handling**: Global error handlers for both regular and slash commands with detailed logging
