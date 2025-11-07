@@ -20,6 +20,7 @@ from utils.card_helpers import (
     create_card_embed,
     RARITY_HIERARCHY
 )
+from utils.merge_helpers import format_merge_level_display
 
 # Recycle credit values by rarity
 RECYCLE_VALUES = {
@@ -401,12 +402,67 @@ class CardCommands(commands.Cog):
                     await message.clear_reactions()
                     break
     
+    async def card_name_autocomplete_for_recycle(
+        self,
+        interaction: discord.Interaction,
+        current: str
+    ) -> list[discord.app_commands.Choice[str]]:
+        """
+        Autocomplete function for recycle command - shows owned cards with merge levels
+        """
+        user_id = interaction.user.id
+        guild_id = interaction.guild_id if interaction.guild else None
+        
+        if not guild_id:
+            return []
+        
+        # Get server deck
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            return []
+        
+        deck_id = deck['deck_id']
+        
+        # Get user's cards from this deck, grouped by card_id and merge_level
+        async with self.db_pool.acquire() as conn:
+            cards = await conn.fetch(
+                """SELECT c.name, c.card_id, uc.merge_level, COUNT(*) as count
+                   FROM user_cards uc
+                   JOIN cards c ON uc.card_id = c.card_id
+                   WHERE uc.user_id = $1 
+                   AND c.deck_id = $2 
+                   AND uc.recycled_at IS NULL
+                   AND LOWER(c.name) LIKE LOWER($3)
+                   GROUP BY c.card_id, c.name, uc.merge_level
+                   ORDER BY c.name, uc.merge_level
+                   LIMIT 25""",
+                user_id, deck_id, f"%{current}%"
+            )
+        
+        choices = []
+        for card in cards:
+            merge_display = format_merge_level_display(card['merge_level'])
+            count_display = f" (x{card['count']})" if card['count'] > 1 else ""
+            
+            # Format: "Card Name ★ (x3)" for level 1+, "Card Name (x3)" for level 0
+            if merge_display:
+                display_name = f"{card['name']} {merge_display}{count_display}"
+            else:
+                display_name = f"{card['name']}{count_display}"
+            
+            # Value stores "card_id|merge_level" for lookup
+            value = f"{card['card_id']}|{card['merge_level']}"
+            choices.append(discord.app_commands.Choice(name=display_name, value=value))
+        
+        return choices
+    
     @commands.hybrid_command(name='recycle', description="Convert duplicate cards into credits based on rarity")
-    async def recycle_cards(self, ctx, card_id: int, amount: int = 1):
+    @discord.app_commands.autocomplete(card_name=card_name_autocomplete_for_recycle)
+    async def recycle_cards(self, ctx, card_name: str, amount: int = 1):
         """
         Recycle duplicate cards from this server's deck for credits.
-        Usage: /recycle [card_id] [amount]
-        Example: /recycle 5 3 (recycles 3 copies of card ID 5)
+        Usage: /recycle <card_name> [amount]
+        Example: /recycle "Rocket ★" 3 (recycles 3 level 1 Rocket cards)
         """
         # Defer if invoked as slash command to avoid timeout
         if ctx.interaction:
@@ -439,6 +495,15 @@ class CardCommands(commands.Cog):
             await ctx.send("❌ You can only recycle up to 100 cards at once!")
             return
         
+        # Parse card_name parameter (format: "card_id|merge_level")
+        try:
+            card_id_str, merge_level_str = card_name.split('|')
+            card_id = int(card_id_str)
+            merge_level = int(merge_level_str)
+        except (ValueError, AttributeError):
+            await ctx.send("❌ Invalid card selection! Please use the autocomplete feature.")
+            return
+        
         async with self.db_pool.acquire() as conn:
             # Get card info and verify it belongs to this server's deck
             card_info = await conn.fetchrow(
@@ -447,7 +512,7 @@ class CardCommands(commands.Cog):
             )
             
             if not card_info:
-                await ctx.send(f"❌ Card ID `{card_id}` does not exist!")
+                await ctx.send(f"❌ Card does not exist!")
                 return
             
             # Verify card belongs to this server's deck
@@ -458,18 +523,20 @@ class CardCommands(commands.Cog):
                 )
                 return
             
-            # Check how many of this card the user owns
+            # Check how many of this card the user owns at this merge level
             user_instances = await conn.fetch(
                 """SELECT instance_id FROM user_cards
-                   WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL
+                   WHERE user_id = $1 AND card_id = $2 AND merge_level = $3 AND recycled_at IS NULL
                    ORDER BY acquired_at ASC
-                   LIMIT $3""",
-                user_id, card_id, amount
+                   LIMIT $4""",
+                user_id, card_id, merge_level, amount
             )
             
             if len(user_instances) < amount:
+                merge_display = format_merge_level_display(merge_level)
+                card_display = f"{card_info['name']} {merge_display}".strip()
                 await ctx.send(
-                    f"❌ You don't have enough **{card_info['name']}** cards!\n"
+                    f"❌ You don't have enough **{card_display}** cards!\n"
                     f"You have: **{len(user_instances)}**, trying to recycle: **{amount}**"
                 )
                 return
@@ -501,9 +568,12 @@ class CardCommands(commands.Cog):
                 )
         
         # Confirmation
+        merge_display = format_merge_level_display(merge_level)
+        card_display = f"{card_info['name']} {merge_display}".strip()
+        
         embed = discord.Embed(
             title="♻️ Cards Recycled!",
-            description=f"Recycled **{amount}x {card_info['name']}** ({rarity})",
+            description=f"Recycled **{amount}x {card_display}** ({rarity})",
             color=discord.Color.gold()
         )
         embed.add_field(name="Credits Earned", value=f"+{total_credits} credits", inline=True)
