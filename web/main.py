@@ -789,6 +789,164 @@ async def delete_card_from_deck(
     
     return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
 
+@app.get("/deck/{deck_id}/card/{card_id}/edit", response_class=HTMLResponse)
+async def edit_card_form(request: Request, deck_id: int, card_id: int, user = Depends(require_admin)):
+    """Show card editing form"""
+    pool = await get_db_pool()
+    
+    async with pool.acquire() as conn:
+        # Get deck info
+        deck = await conn.fetchrow(
+            "SELECT * FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        # Check permissions
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Get card info
+        card = await conn.fetchrow(
+            "SELECT * FROM cards WHERE card_id = $1 AND deck_id = $2",
+            card_id, deck_id
+        )
+        
+        if not card:
+            raise HTTPException(status_code=404, detail="Card not found")
+        
+        # Get template fields for this deck
+        template_fields = await conn.fetch(
+            """SELECT * FROM card_templates 
+               WHERE deck_id = $1 
+               ORDER BY field_order""",
+            deck_id
+        )
+        
+        # Get existing field values for this card
+        field_values_rows = await conn.fetch(
+            """SELECT template_id, field_value 
+               FROM card_template_fields 
+               WHERE card_id = $1""",
+            card_id
+        )
+        
+        # Convert to dictionary for easy lookup
+        field_values = {row['template_id']: row['field_value'] for row in field_values_rows}
+    
+    return templates.TemplateResponse("edit_card.html", {
+        "request": request,
+        "user": user,
+        "deck": dict(deck),
+        "card": dict(card),
+        "template_fields": template_fields,
+        "field_values": field_values
+    })
+
+@app.post("/deck/{deck_id}/card/{card_id}/update")
+async def update_card(
+    request: Request,
+    deck_id: int,
+    card_id: int,
+    name: str = Form(...),
+    description: str = Form(...),
+    rarity: str = Form(...),
+    image_url: str = Form(None),
+    mergeable: bool = Form(False),
+    max_merge_level: int = Form(0),
+    user = Depends(require_admin)
+):
+    """Update an existing card with all editable attributes"""
+    pool = await get_db_pool()
+    form_data = await request.form()
+    
+    # If not mergeable, set max_merge_level to 0
+    if not mergeable:
+        max_merge_level = 0
+    
+    async with pool.acquire() as conn:
+        # Verify deck ownership
+        deck = await conn.fetchrow(
+            "SELECT created_by FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Verify card belongs to this deck
+        card = await conn.fetchrow(
+            "SELECT card_id FROM cards WHERE card_id = $1 AND deck_id = $2",
+            card_id, deck_id
+        )
+        
+        if not card:
+            raise HTTPException(status_code=404, detail="Card not found in this deck")
+        
+        # Normalize blank image_url to NULL
+        if image_url == '':
+            image_url = None
+        
+        # Use transaction to ensure atomicity
+        async with conn.transaction():
+            # Update card basic fields
+            await conn.execute(
+                """UPDATE cards 
+                   SET name = $1, description = $2, rarity = $3, image_url = $4, 
+                       mergeable = $5, max_merge_level = $6
+                   WHERE card_id = $7""",
+                name, description, rarity, image_url, mergeable, max_merge_level, card_id
+            )
+            
+            # Get template fields for this deck
+            template_fields = await conn.fetch(
+                "SELECT template_id FROM card_templates WHERE deck_id = $1",
+                deck_id
+            )
+            
+            # Update template field values
+            for template_field in template_fields:
+                template_id = template_field['template_id']
+                field_key = f"template_field_{template_id}"
+                
+                if field_key in form_data:
+                    field_value = form_data.get(field_key)
+                    
+                    # Check if value already exists
+                    existing = await conn.fetchrow(
+                        """SELECT field_value FROM card_template_fields 
+                           WHERE card_id = $1 AND template_id = $2""",
+                        card_id, template_id
+                    )
+                    
+                    if field_value:  # Update or insert non-empty values
+                        if existing:
+                            await conn.execute(
+                                """UPDATE card_template_fields 
+                                   SET field_value = $1 
+                                   WHERE card_id = $2 AND template_id = $3""",
+                                field_value, card_id, template_id
+                            )
+                        else:
+                            await conn.execute(
+                                """INSERT INTO card_template_fields (card_id, template_id, field_value)
+                                   VALUES ($1, $2, $3)""",
+                                card_id, template_id, field_value
+                            )
+                    elif existing:  # Delete empty values
+                        await conn.execute(
+                            """DELETE FROM card_template_fields 
+                               WHERE card_id = $1 AND template_id = $2""",
+                            card_id, template_id
+                        )
+    
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
 @app.get("/deck/{deck_id}/cooldown", response_class=HTMLResponse)
 async def edit_cooldown(request: Request, deck_id: int, user = Depends(require_admin)):
     """Show cooldown editor"""

@@ -169,10 +169,13 @@
                         {% endif %}
                     </div>
                 </div>
-                <form method="POST" action="/deck/{{ deck.deck_id }}/card/{{ card.card_id }}/delete" 
-                      onsubmit="return confirm('Delete {{ card.name }}?');">
-                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                </form>
+                <div class="card-actions">
+                    <a href="/deck/{{ deck.deck_id }}/card/{{ card.card_id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                    <form method="POST" action="/deck/{{ deck.deck_id }}/card/{{ card.card_id }}/delete" 
+                          onsubmit="return confirm('Delete {{ card.name }}?');" style="display: inline;">
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </div>
             </div>
             {% endfor %}
         </div>

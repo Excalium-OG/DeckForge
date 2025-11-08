@@ -478,6 +478,12 @@ body {
     color: #6b7280;
 }
 
+.card-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
 /* Rarity Form */
 .rarity-info {
     background: #f3f4f6;
