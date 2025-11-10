@@ -215,8 +215,9 @@ class SlashCommands(commands.Cog):
                             
                             for perk in merge_perks:
                                 perk_name = perk['perk_name']
-                                base_boost = perk['base_boost']
-                                diminishing_factor = perk['diminishing_factor']
+                                # Convert Decimal to float for calculations
+                                base_boost = float(perk['base_boost'])
+                                diminishing_factor = float(perk['diminishing_factor'])
                                 
                                 cumulative_boost = calculate_cumulative_perk_boost(
                                     base_boost, merge_level, diminishing_factor
