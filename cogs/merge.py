@@ -462,6 +462,57 @@ class MergeCommands(commands.Cog):
                        VALUES ($1, $2, $3, $4)""",
                     uuid.UUID(instance_uuid_1), next_level, locked_perk, perk_boost
                 )
+                
+                # Apply boost to the actual field value
+                # Find the template field that matches the locked perk name
+                template_field = await conn.fetchrow(
+                    """SELECT ct.template_id, ct.field_name, ct.field_type, ctf.field_value
+                       FROM card_templates ct
+                       JOIN card_template_fields ctf ON ct.template_id = ctf.template_id
+                       WHERE ctf.card_id = $1 
+                       AND LOWER(ct.field_name) = LOWER($2)
+                       AND ct.field_type = 'number'
+                       LIMIT 1""",
+                    card_id, locked_perk
+                )
+                
+                if template_field:
+                    base_value = float(template_field['field_value'])
+                    # Apply percentage boost: new_value = base_value * (1 + boost_pct/100)
+                    boosted_value = base_value * (1 + cumulative_boost / 100)
+                    
+                    # Store or update the override
+                    from datetime import datetime, timezone
+                    await conn.execute(
+                        """INSERT INTO user_card_field_overrides 
+                           (instance_id, template_id, base_value, effective_numeric_value, 
+                            overridden_value, metadata, updated_at)
+                           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                           ON CONFLICT (instance_id, template_id) 
+                           DO UPDATE SET 
+                               base_value = EXCLUDED.base_value,
+                               effective_numeric_value = EXCLUDED.effective_numeric_value,
+                               overridden_value = EXCLUDED.overridden_value,
+                               metadata = EXCLUDED.metadata,
+                               updated_at = NOW()""",
+                        uuid.UUID(instance_uuid_1), 
+                        template_field['template_id'],
+                        str(base_value),
+                        boosted_value,
+                        str(round(boosted_value, 2)),
+                        {
+                            'cumulative_boost_pct': cumulative_boost,
+                            'merge_level': next_level,
+                            'calculation_timestamp': datetime.now(timezone.utc).isoformat()
+                        }
+                    )
+                else:
+                    # Warning: perk name doesn't match any numeric template field
+                    import logging
+                    logging.warning(
+                        f"Merge perk '{locked_perk}' for card_id {card_id} doesn't match any numeric template field. "
+                        f"Perk will be tracked but won't affect card values."
+                    )
             
             # Create success embed
             embed = discord.Embed(
@@ -490,13 +541,13 @@ class MergeCommands(commands.Cog):
             
             embed.add_field(
                 name="Perk Boost (This Level)",
-                value=f"+{perk_boost}",
+                value=f"+{perk_boost}%",
                 inline=True
             )
             
             embed.add_field(
                 name="Total Cumulative Boost",
-                value=f"+{cumulative_boost}",
+                value=f"+{cumulative_boost}%",
                 inline=True
             )
             

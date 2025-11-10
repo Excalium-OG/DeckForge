@@ -153,23 +153,51 @@ class SlashCommands(commands.Cog):
             
             # Get custom template fields for this card
             template_fields = await conn.fetch(
-                """SELECT ctf.field_value, ct.field_name, ct.field_type
+                """SELECT ctf.field_value, ct.field_name, ct.field_type, ct.template_id
                    FROM card_template_fields ctf
                    JOIN card_templates ct ON ctf.template_id = ct.template_id
                    WHERE ctf.card_id = $1
                    ORDER BY ct.field_order""",
                 card['card_id']
             )
+            
+            # If merge_level specified, get a sample instance at that level to show boosted values
+            sample_instance = None
+            if merge_level is not None and merge_level > 0:
+                sample_instance = await conn.fetchrow(
+                    """SELECT instance_id 
+                       FROM user_cards 
+                       WHERE user_id = $1 AND card_id = $2 AND merge_level = $3 AND recycled_at IS NULL
+                       LIMIT 1""",
+                    interaction.user.id, card['card_id'], merge_level
+                )
         
         # Create embed
         embed = create_card_embed(card)
         
-        # Add custom template fields
+        # Add custom template fields (with overrides if viewing specific merge level)
         if template_fields:
             for field in template_fields:
+                field_value = field['field_value'] or 'N/A'
+                field_name = field['field_name']
+                
+                # Check if we should show boosted value for this field
+                if sample_instance:
+                    async with self.db_pool.acquire() as conn:
+                        override = await conn.fetchrow(
+                            """SELECT overridden_value, metadata
+                               FROM user_card_field_overrides
+                               WHERE instance_id = $1 AND template_id = $2""",
+                            sample_instance['instance_id'], field['template_id']
+                        )
+                        
+                        if override:
+                            boost_pct = override['metadata'].get('cumulative_boost_pct', 0)
+                            field_value = f"{override['overridden_value']} ✨ (+{boost_pct}%)"
+                
                 embed.add_field(
-                    name=field['field_name'],
-                    value=field['field_value'] or 'N/A',
+                    name=field_name,
+                    value=field_value,
                     inline=True
                 )
         
@@ -225,7 +253,7 @@ class SlashCommands(commands.Cog):
                                 
                                 embed.add_field(
                                     name=f"• {perk_name}",
-                                    value=f"+{cumulative_boost}",
+                                    value=f"+{cumulative_boost}%",
                                     inline=True
                                 )
                         elif merge_level == 0:
