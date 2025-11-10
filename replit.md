@@ -18,10 +18,10 @@ Preferred communication style: Simple, everyday language.
 
 ### Data Layer
 - **Database**: PostgreSQL is used for all persistent storage, managed with `asyncpg` for asynchronous operations and connection pooling.
-- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, `rarity_ranges`, `card_templates`, `card_template_fields`, `server_settings`, `card_perks`, and `deck_merge_perks`. `user_cards` uses UUIDs for unique instance tracking with merge level tracking.
+- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, `rarity_ranges`, `card_templates`, `card_template_fields`, `server_settings`, `card_perks`, `deck_merge_perks`, and `user_card_field_overrides`. `user_cards` uses UUIDs for unique instance tracking with merge level tracking.
 - **Custom Card Templates**: The `card_templates` table stores custom field definitions per deck (field name, type, required flag, display order), while `card_template_fields` stores actual field values for each card. Supports text, number, and dropdown field types.
 - **Server Settings**: The `server_settings` table stores per-server configurations including active deck assignments and customizations.
-- **Merge System**: The `card_perks` table tracks perk progression history for merged cards, while `deck_merge_perks` defines available merge perks and their scaling parameters per deck. Cards have `mergeable` and `max_merge_level` attributes, while user card instances track `merge_level` and `locked_perk`.
+- **Merge System**: The `card_perks` table tracks perk progression history for merged cards, while `deck_merge_perks` defines available merge perks and their scaling parameters per deck. Cards have `mergeable` and `max_merge_level` attributes, while user card instances track `merge_level` and `locked_perk`. The `user_card_field_overrides` table stores instance-specific boosted field values, automatically applying cumulative percentage boosts to numeric template fields that match the locked perk name.
 
 ### Core Game Mechanics
 - **Pack System**: Three pack types (Normal, Booster, Booster+). Users can claim a free Normal Pack every 8 hours or purchase packs with credits. Packs have a 30-item inventory limit, and Booster Packs apply rarity multipliers.
@@ -29,11 +29,12 @@ Preferred communication style: Simple, everyday language.
 - **Card Merge System**: Progressive card upgrading through merge operations. Mergeable cards can be combined (2 cards of same type and level → 1 card of next level). Features include:
   - **Perk Selection**: On first merge (level 0→1), players select a characteristic to boost from available merge perks
   - **Perk Locking**: Selected perk is locked for all future merges of that card instance. Cards with different locked perks cannot be merged together, preserving distinct progression paths.
+  - **Applied Boosts**: When merging, the system automatically applies cumulative percentage boosts to numeric template fields matching the locked perk name. For example, a "Payload Capacity" perk with +18.5% boost will increase a 7020 kg base value to 8318.7 kg. Boosted values are stored in `user_card_field_overrides` with metadata tracking the base value, boost percentage, and calculation timestamp.
   - **Smart Autocomplete**: The `/merge` command autocomplete groups cards by card_id, merge_level, AND locked_perk, showing only valid mergeable pairs. For level 1+ cards, displays perk indicator in autocomplete: "Card Name ★ [Perk] (x2)"
-  - **Diminishing Returns**: Perk boosts follow formula `Boost(L) = P0 * d^(L-1)` where P0 is base boost and d is diminishing factor (default 0.85)
+  - **Diminishing Returns**: Perk boosts follow formula `Boost(L) = P0 * d^(L-1)` where P0 is base boost percentage and d is diminishing factor (default 0.85)
   - **Pyramid Scaling**: Requires 2^L base cards to reach level L
   - **Exponential Costs**: Merge cost follows `Cost(L) = C0 * 1.25^L` where C0 is rarity-based recycle value
-  - **Visual Indicators**: Merge levels displayed as stars (★) for levels 1-5 or +L for higher levels
+  - **Visual Indicators**: Merge levels displayed as stars (★) for levels 1-5 or +L for higher levels. Boosted field values display with sparkle emoji (✨) and percentage indicator in `/cardinfo`
 - **Inventory Management**: `/mycards` command groups cards by card ID and merge level, supports pagination with reaction-based navigation, and displays total/unique card counts with merge level indicators.
 - **Card Recycling**: `/recycle` command with autocomplete allows users to convert duplicate cards into credits based on rarity. Tracks merge levels separately, enabling users to selectively recycle cards at specific merge levels while preserving higher-level cards. Cards are soft-deleted via a `recycled_at` timestamp.
 - **Player-to-Player Trading**: A multi-step `/requesttrade` system with `/tradeadd`/`/traderemove`, `/accepttrade`, and `/finalize` commands. Features include:
