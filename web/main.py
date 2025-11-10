@@ -675,6 +675,23 @@ async def edit_deck_form(request: Request, deck_id: int, user = Depends(require_
             deck_id
         )
         
+        # Get number-type template fields for merge perks dropdown
+        number_template_fields = await conn.fetch(
+            """SELECT template_id, field_name FROM card_templates 
+               WHERE deck_id = $1 AND field_type = 'number'
+               ORDER BY field_name""",
+            deck_id
+        )
+        
+        # Get existing merge perks for this deck
+        merge_perks = await conn.fetch(
+            """SELECT perk_name, base_boost, diminishing_factor 
+               FROM deck_merge_perks 
+               WHERE deck_id = $1 
+               ORDER BY perk_name""",
+            deck_id
+        )
+        
         # Get cards in this deck with their template field values
         cards = await conn.fetch(
             """SELECT c.*, 
@@ -695,6 +712,8 @@ async def edit_deck_form(request: Request, deck_id: int, user = Depends(require_
         "request": request,
         "user": user,
         "template_fields": template_fields,
+        "number_template_fields": number_template_fields,
+        "merge_perks": merge_perks,
         "deck": dict(deck),
         "cards": [dict(c) for c in cards]
     })
@@ -785,6 +804,80 @@ async def delete_card_from_deck(
         await conn.execute(
             "DELETE FROM cards WHERE card_id = $1 AND deck_id = $2",
             card_id, deck_id
+        )
+    
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
+@app.post("/deck/{deck_id}/merge_perk/add")
+async def add_merge_perk(
+    request: Request,
+    deck_id: int,
+    perk_name: str = Form(...),
+    base_boost: float = Form(...),
+    user = Depends(require_admin)
+):
+    """Add a merge perk to a deck"""
+    pool = await get_db_pool()
+    
+    # Validate base_boost
+    if base_boost < 0.1 or base_boost > 100:
+        raise HTTPException(status_code=400, detail="Base boost must be between 0.1 and 100")
+    
+    async with pool.acquire() as conn:
+        # Verify deck ownership
+        deck = await conn.fetchrow(
+            "SELECT created_by FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Insert merge perk (using default diminishing_factor of 0.85)
+        try:
+            await conn.execute(
+                """INSERT INTO deck_merge_perks (deck_id, perk_name, base_boost, diminishing_factor)
+                   VALUES ($1, $2, $3, 0.85)""",
+                deck_id, perk_name, base_boost
+            )
+        except Exception as e:
+            # Handle duplicate perk name
+            if 'duplicate key' in str(e).lower():
+                raise HTTPException(status_code=400, detail=f"Merge perk '{perk_name}' already exists for this deck")
+            raise
+    
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
+@app.post("/deck/{deck_id}/merge_perk/{perk_name}/delete")
+async def delete_merge_perk(
+    request: Request,
+    deck_id: int,
+    perk_name: str,
+    user = Depends(require_admin)
+):
+    """Delete a merge perk from a deck"""
+    pool = await get_db_pool()
+    
+    async with pool.acquire() as conn:
+        # Verify deck ownership
+        deck = await conn.fetchrow(
+            "SELECT created_by FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Delete merge perk
+        await conn.execute(
+            "DELETE FROM deck_merge_perks WHERE deck_id = $1 AND perk_name = $2",
+            deck_id, perk_name
         )
     
     return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)

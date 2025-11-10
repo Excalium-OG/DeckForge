@@ -146,6 +146,76 @@
     </script>
     
     <div class="section">
+        <h3>Merge Perks Configuration</h3>
+        <p class="info-text">Configure progressive upgrade perks that players can select when merging cards. Perks apply percentage boosts to number-based card attributes with diminishing returns at higher merge levels.</p>
+        
+        {% if number_template_fields %}
+        <form method="POST" action="/deck/{{ deck.deck_id }}/merge_perk/add" class="card-form">
+            <h4>Add New Merge Perk</h4>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="perk_name">Attribute to Boost *</label>
+                    <select id="perk_name" name="perk_name" required>
+                        <option value="">Select an attribute...</option>
+                        {% for field in number_template_fields %}
+                        <option value="{{ field.field_name }}">{{ field.field_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small>Choose a number-based attribute that this perk will enhance</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="base_boost">Base Boost (%) *</label>
+                    <input type="number" id="base_boost" name="base_boost" required 
+                           min="0.1" max="100" step="0.1" placeholder="10.0">
+                    <small>Percentage boost at merge level 1 (e.g., 10 = +10%)</small>
+                </div>
+            </div>
+            
+            <div class="info-box">
+                <strong>How it works:</strong> At level 1, the perk applies +base%. At higher levels, the boost diminishes by 15% per level (factor: 0.85). 
+                <br>Example: 10% base → Level 1: +10%, Level 2: +8.5%, Level 3: +7.2%, etc.
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Add Merge Perk</button>
+        </form>
+        {% else %}
+        <p class="empty-state">⚠️ No number-based template fields defined. Add numeric attributes (like "Attack", "Defense", "Speed") in your card template to enable merge perks.</p>
+        {% endif %}
+        
+        {% if merge_perks %}
+        <h4 style="margin-top: 2rem;">Current Merge Perks ({{ merge_perks|length }})</h4>
+        <div class="merge-perks-list">
+            {% for perk in merge_perks %}
+            <div class="perk-item">
+                <div class="perk-info">
+                    <h5>{{ perk.perk_name }}</h5>
+                    <div class="perk-stats">
+                        <span class="perk-stat">Base Boost: <strong>+{{ perk.base_boost }}%</strong></span>
+                        <span class="perk-stat">Diminishing Factor: <strong>{{ perk.diminishing_factor }}</strong></span>
+                    </div>
+                    <div class="perk-preview">
+                        <small>Level progression: 
+                            L1: +{{ "%.1f"|format(perk.base_boost) }}%, 
+                            L2: +{{ "%.1f"|format(perk.base_boost * perk.diminishing_factor) }}%, 
+                            L3: +{{ "%.1f"|format(perk.base_boost * (perk.diminishing_factor ** 2)) }}%, 
+                            L4: +{{ "%.1f"|format(perk.base_boost * (perk.diminishing_factor ** 3)) }}%, 
+                            L5: +{{ "%.1f"|format(perk.base_boost * (perk.diminishing_factor ** 4)) }}%
+                        </small>
+                    </div>
+                </div>
+                <form method="POST" action="/deck/{{ deck.deck_id }}/merge_perk/{{ perk.perk_name }}/delete" 
+                      onsubmit="return confirm('Delete merge perk \'{{ perk.perk_name }}\'? This will not affect existing merged cards.');" 
+                      style="display: inline;">
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="section">
         <h3>Cards in Deck ({{ cards|length }})</h3>
         {% if cards %}
         <div class="cards-list">
