@@ -395,8 +395,9 @@ class MergeCommands(commands.Cog):
                     return
                 
                 locked_perk = selected_perk['perk_name']
-                base_boost = selected_perk['base_boost']
-                diminishing_factor = selected_perk['diminishing_factor']
+                # Convert Decimal to float for calculations
+                base_boost = float(selected_perk['base_boost'])
+                diminishing_factor = float(selected_perk['diminishing_factor'])
             else:
                 # Use locked perk from first card
                 locked_perk = instances[0]['locked_perk']
@@ -423,8 +424,9 @@ class MergeCommands(commands.Cog):
                     )
                     return
                 
-                base_boost = perk_config['base_boost']
-                diminishing_factor = perk_config['diminishing_factor']
+                # Convert Decimal to float for calculations
+                base_boost = float(perk_config['base_boost'])
+                diminishing_factor = float(perk_config['diminishing_factor'])
             
             # Calculate perk boost for new level
             perk_boost = calculate_perk_boost(base_boost, next_level, diminishing_factor)
