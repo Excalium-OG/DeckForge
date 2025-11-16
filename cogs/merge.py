@@ -7,6 +7,7 @@ from discord.ext import commands
 from discord import app_commands
 import asyncpg
 import uuid
+import json
 from typing import Optional, List
 
 from utils.merge_helpers import (
@@ -483,6 +484,12 @@ class MergeCommands(commands.Cog):
                     
                     # Store or update the override
                     from datetime import datetime, timezone
+                    metadata_json = json.dumps({
+                        'cumulative_boost_pct': cumulative_boost,
+                        'merge_level': next_level,
+                        'calculation_timestamp': datetime.now(timezone.utc).isoformat()
+                    })
+                    
                     await conn.execute(
                         """INSERT INTO user_card_field_overrides 
                            (instance_id, template_id, base_value, effective_numeric_value, 
@@ -500,11 +507,7 @@ class MergeCommands(commands.Cog):
                         str(base_value),
                         boosted_value,
                         str(round(boosted_value, 2)),
-                        {
-                            'cumulative_boost_pct': cumulative_boost,
-                            'merge_level': next_level,
-                            'calculation_timestamp': datetime.now(timezone.utc).isoformat()
-                        }
+                        metadata_json
                     )
                 else:
                     # Warning: perk name doesn't match any numeric template field
