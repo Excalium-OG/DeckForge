@@ -3,6 +3,122 @@
 {% block title %}Login - DeckForge Admin Portal{% endblock %}
 
 {% block content %}
+<style>
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  .top-bar {
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    color: #333;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .top-bar .nav-links {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .top-bar .nav-links a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .top-bar .login-btn {
+    background-color: #667eea;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .main-container {
+    display: flex;
+    padding: 2rem;
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .login-card {
+    flex: 2;
+    background-color: white;
+    padding: 2.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+
+  .update-pane {
+    flex: 1;
+    background-color: white;
+    padding: 1.5rem;
+    overflow-y: auto;
+    max-height: 600px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+
+  .update-pane h3 {
+    margin-top: 0;
+  }
+
+  .btn-discord {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #5865F2;
+    color: white;
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    text-decoration: none;
+    margin-top: 1rem;
+  }
+
+  .info-section {
+    margin-top: 1.5rem;
+  }
+
+  .summary-section {
+    margin-top: 1.5rem;
+    background-color: #f0f9ff;
+    padding: 1.5rem;
+    border-radius: 8px;
+  }
+
+  .invite-link {
+    margin-top: 1rem;
+    font-weight: 600;
+  }
+
+  .invite-link a {
+    color: #667eea;
+    text-decoration: none;
+  }
+
+  .alert {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .alert-error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #ef4444;
+  }
+</style>
+
 <div class="top-bar">
   <div class="nav-links">
     <a href="/faq">FAQ</a>
