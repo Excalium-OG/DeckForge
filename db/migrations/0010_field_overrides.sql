@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS user_card_field_overrides (
     PRIMARY KEY (instance_id, template_id)
 );
 
-CREATE INDEX idx_user_card_field_overrides_instance ON user_card_field_overrides(instance_id);
+CREATE INDEX IF NOT EXISTS idx_user_card_field_overrides_instance ON user_card_field_overrides(instance_id);
 
 COMMENT ON TABLE user_card_field_overrides IS 'Stores instance-specific field value overrides for merged cards';
 COMMENT ON COLUMN user_card_field_overrides.base_value IS 'Snapshot of the base field value when boost was applied';
