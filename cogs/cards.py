@@ -426,14 +426,14 @@ class CardCommands(commands.Cog):
         # Get user's cards from this deck, grouped by card_id and merge_level
         async with self.db_pool.acquire() as conn:
             cards = await conn.fetch(
-                """SELECT c.name, c.card_id, uc.merge_level, COUNT(*) as count
+                """SELECT c.name, c.card_id, c.rarity, uc.merge_level, COUNT(*) as count
                    FROM user_cards uc
                    JOIN cards c ON uc.card_id = c.card_id
                    WHERE uc.user_id = $1 
                    AND c.deck_id = $2 
                    AND uc.recycled_at IS NULL
                    AND LOWER(c.name) LIKE LOWER($3)
-                   GROUP BY c.card_id, c.name, uc.merge_level
+                   GROUP BY c.card_id, c.name, c.rarity, uc.merge_level
                    ORDER BY c.name, uc.merge_level
                    LIMIT 25""",
                 user_id, deck_id, f"%{current}%"
@@ -444,11 +444,15 @@ class CardCommands(commands.Cog):
             merge_display = format_merge_level_display(card['merge_level'])
             count_display = f" (x{card['count']})" if card['count'] > 1 else ""
             
-            # Format: "Card Name ★ (x3)" for level 1+, "Card Name (x3)" for level 0
+            # Calculate recycle value
+            base_value = RECYCLE_VALUES.get(card['rarity'], 10)
+            credit_value = int(base_value * (1.25 ** card['merge_level']))
+            
+            # Format: "Card Name ★ (x3) - 12cr" for level 1+, "Card Name (x3) - 10cr" for level 0
             if merge_display:
-                display_name = f"{card['name']} {merge_display}{count_display}"
+                display_name = f"{card['name']} {merge_display}{count_display} - {credit_value}cr"
             else:
-                display_name = f"{card['name']}{count_display}"
+                display_name = f"{card['name']}{count_display} - {credit_value}cr"
             
             # Value stores "card_id|merge_level" for lookup
             value = f"{card['card_id']}|{card['merge_level']}"
@@ -541,9 +545,13 @@ class CardCommands(commands.Cog):
                 )
                 return
             
-            # Calculate credits
+            # Calculate credits based on rarity and merge level
             rarity = card_info['rarity']
-            credit_value = RECYCLE_VALUES.get(rarity, 10)
+            base_value = RECYCLE_VALUES.get(rarity, 10)
+            
+            # Merged cards are worth more: base_value * 1.25^merge_level
+            # This matches the merge cost formula, so you get back what it cost to merge
+            credit_value = int(base_value * (1.25 ** merge_level))
             total_credits = credit_value * amount
             
             # Use transaction to ensure atomicity

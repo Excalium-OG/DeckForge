@@ -36,7 +36,9 @@ Preferred communication style: Simple, everyday language.
   - **Exponential Costs**: Merge cost follows `Cost(L) = C0 * 1.25^L` where C0 is rarity-based recycle value
   - **Visual Indicators**: Merge levels displayed as stars (★) for levels 1-5 or +L for higher levels. Boosted field values display with sparkle emoji (✨) and percentage indicator in `/cardinfo`
 - **Inventory Management**: `/mycards` command groups cards by card ID and merge level, supports pagination with reaction-based navigation, and displays total/unique card counts with merge level indicators.
-- **Card Recycling**: `/recycle` command with autocomplete allows users to convert duplicate cards into credits based on rarity. Tracks merge levels separately, enabling users to selectively recycle cards at specific merge levels while preserving higher-level cards. Cards are soft-deleted via a `recycled_at` timestamp.
+- **Card Recycling**: `/recycle` command with autocomplete allows users to convert duplicate cards into credits. Tracks merge levels separately, enabling users to selectively recycle cards at specific merge levels while preserving higher-level cards. Cards are soft-deleted via a `recycled_at` timestamp.
+  - **Merged Card Values**: Recycle value scales with merge level using formula `Value(L) = V0 * 1.25^L` where V0 is rarity-based base value. This matches the merge cost, so recycling a merged card returns the credits invested to reach that level.
+  - **Smart Autocomplete**: Shows recycle value per card in autocomplete (e.g., "Card Name ★ (x3) - 12cr")
 - **Player-to-Player Trading**: A multi-step `/requesttrade` system with `/tradeadd`/`/traderemove`, `/accepttrade`, and `/finalize` commands. Features include:
   - **Merge Level Tracking**: Cards with different merge levels are tracked separately in trades, allowing players to specify which level they want to trade
   - **Smart Autocomplete**: `/tradeadd` shows owned cards with merge level indicators ("Card Name ★ (x3)"), `/traderemove` shows only cards currently in the trade
