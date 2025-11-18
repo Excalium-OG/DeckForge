@@ -464,7 +464,7 @@ async def marketplace(request: Request, user = Depends(require_auth)):
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT deck_id, name, created_by, created_at, public_description FROM decks WHERE is_public = TRUE AND (public_visible IS NULL OR public_visible = TRUE) ORDER BY created_at DESC"
+            "SELECT deck_id, name, created_by, created_at, public_description FROM decks WHERE is_public = TRUE ORDER BY created_at DESC"
         )
     decks = [dict(r) for r in rows]
 
@@ -510,7 +510,7 @@ async def adopt_deck(deck_id: int, guild_id: int = Form(...), user = Depends(req
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         public_deck = await conn.fetchrow(
-            "SELECT * FROM decks WHERE deck_id = $1 AND is_public = TRUE AND (public_visible IS NULL OR public_visible = TRUE)",
+            "SELECT * FROM decks WHERE deck_id = $1 AND is_public = TRUE",
             deck_id
         )
         if not public_deck:
