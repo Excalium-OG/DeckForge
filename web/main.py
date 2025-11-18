@@ -576,6 +576,59 @@ async def adopt_deck(deck_id: int, guild_id: int = Form(...), user = Depends(req
 
     return RedirectResponse(url="/dashboard", status_code=303)
 
+@app.get("/deck/{deck_id}/view", response_class=HTMLResponse)
+async def view_deck(request: Request, deck_id: int, user = Depends(require_auth)):
+    """View-only page for browsing deck contents (for public decks in marketplace)"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get deck info - allow viewing public decks or owned decks
+        deck = await conn.fetchrow(
+            """SELECT deck_id, name, created_by, is_public, public_description, free_pack_cooldown_hours
+               FROM decks WHERE deck_id = $1""",
+            deck_id
+        )
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        deck = dict(deck)
+        
+        # Check if user can view this deck (public or owned by user or global admin)
+        if not deck.get('is_public') and deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="This deck is private")
+        
+        # Get all cards in the deck
+        cards = await conn.fetch(
+            """SELECT card_id, name, description, rarity, image_url, mergeable, max_merge_level
+               FROM cards WHERE deck_id = $1 ORDER BY rarity, name""",
+            deck_id
+        )
+        cards_list = [dict(c) for c in cards]
+        
+        # Get template fields for this deck
+        template_fields = await conn.fetch(
+            """SELECT template_id, field_name, field_type, dropdown_options, field_order, is_required
+               FROM card_templates WHERE deck_id = $1 ORDER BY field_order""",
+            deck_id
+        )
+        
+        # Get field values for all cards
+        card_field_values = {}
+        for card in cards_list:
+            field_values = await conn.fetch(
+                """SELECT template_id, field_value FROM card_template_fields WHERE card_id = $1""",
+                card['card_id']
+            )
+            card_field_values[card['card_id']] = {fv['template_id']: fv['field_value'] for fv in field_values}
+        
+        return templates.TemplateResponse("view_deck.html", {
+            "request": request,
+            "user": user,
+            "deck": deck,
+            "cards": cards_list,
+            "template_fields": template_fields,
+            "card_field_values": card_field_values
+        })
+
 @app.get("/deck/create", response_class=HTMLResponse)
 async def create_deck_form(request: Request, user = Depends(require_admin)):
     """Show deck creation form"""
