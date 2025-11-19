@@ -2,11 +2,158 @@
 {% block title %}Marketplace - DeckForge{% endblock %}
 
 {% block content %}
-<h1>Marketplace</h1>
-<p>Browse public decks created by the community. Pick a deck and adopt it into one of your managed servers.</p>
-<br>
-<a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
-<br>
+<style>
+  .marketplace-container {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+
+  .marketplace-header {
+    margin-bottom: 2rem;
+  }
+
+  .marketplace-header h1 {
+    margin: 0 0 0.5rem 0;
+  }
+
+  .marketplace-header p {
+    color: #6b7280;
+    margin: 0 0 1.5rem 0;
+  }
+
+  .marketplace-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .deck-card {
+    background: #f9fafb;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .deck-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  }
+
+  .deck-card h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    color: #374151;
+  }
+
+  .deck-card .meta {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin: 0 0 1rem 0;
+  }
+
+  .deck-card .description {
+    color: #374151;
+    margin: 0 0 1.5rem 0;
+    line-height: 1.5;
+  }
+
+  .deck-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .adopt-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .adopt-form label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.875rem;
+  }
+
+  .adopt-form select {
+    padding: 0.5rem;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: white;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-size: 1rem;
+    text-align: center;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn-primary {
+    background: #667eea;
+    color: white;
+    border-color: #5568d3;
+  }
+
+  .btn-primary:hover {
+    background: #5568d3;
+  }
+
+  .btn-secondary {
+    background: white;
+    color: #374151;
+    border-color: #d1d5db;
+  }
+
+  .btn-secondary:hover {
+    background: #f9fafb;
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: #667eea;
+    border-color: #667eea;
+  }
+
+  .btn-outline:hover {
+    background: #667eea;
+    color: white;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: #6b7280;
+    padding: 3rem;
+    font-style: italic;
+  }
+</style>
+
+<div class="marketplace-container">
+  <div class="marketplace-header">
+    <h1>Deck Marketplace</h1>
+    <p>Browse public decks created by the community. Pick a deck and adopt it into one of your managed servers.</p>
+    <a href="/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+  </div>
+
 {% if decks %}
   <div class="marketplace-grid">
     {% for deck in decks %}
@@ -16,8 +163,10 @@
         <p class="description">{{ deck.public_description or "No description provided." }}</p>
 
         <div class="deck-actions">
-          <form action="/marketplace/{{ deck.deck_id }}/adopt" method="post" style="display:inline-block">
-            <label for="guild_{{ deck.deck_id }}">Adopt into server</label>
+          <a href="/deck/{{ deck.deck_id }}/view" class="btn btn-outline">👁 View Cards</a>
+          
+          <form action="/marketplace/{{ deck.deck_id }}/adopt" method="post" class="adopt-form">
+            <label for="guild_{{ deck.deck_id }}">Adopt into server:</label>
             <select name="guild_id" id="guild_{{ deck.deck_id }}" required>
               {% if managed_guilds %}
                 {% for g in managed_guilds %}
@@ -27,24 +176,16 @@
                 <option disabled>No managed servers found</option>
               {% endif %}
             </select>
-            <button type="submit">Adopt</button>
+            <button type="submit" class="btn btn-primary">Adopt Deck</button>
           </form>
-
-          <a href="/deck/{{ deck.deck_id }}/view" class="button">View Deck</a>
         </div>
       </div>
     {% endfor %}
   </div>
 {% else %}
-  <p>No public decks found.</p>
+  <div class="empty-state">
+    <p>No public decks found in the marketplace.</p>
+  </div>
 {% endif %}
-
-<style>
-.marketplace-grid { display:flex; flex-wrap:wrap; gap:1rem; }
-.deck-card { border:1px solid #ddd; padding:1rem; width:320px; border-radius:6px; background:#fff; }
-.deck-card h2 { margin:0 0 .25rem 0; }
-.deck-actions { margin-top:.5rem; display:flex; gap:.5rem; align-items:center; }
-.deck-actions select { min-width:170px; }
-.button { text-decoration:none; padding:.4rem .6rem; background:#2f80ed; color:#fff; border-radius:4px; }
-</style>
+</div>
 {% endblock %}

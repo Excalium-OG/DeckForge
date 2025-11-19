@@ -3,6 +3,123 @@
 {% block title %}Edit Rarity Rates - {{ deck.name }}{% endblock %}
 
 {% block content %}
+<style>
+  .form-container {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .deck-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+
+  .deck-header h2 {
+    margin: 0;
+  }
+
+  .rarity-info {
+    background: #f3f4f6;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+  }
+
+  .total-display {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-top: 0.5rem;
+  }
+
+  .rarity-inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .form-group {
+    margin-bottom: 0;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .input-with-suffix {
+    position: relative;
+  }
+
+  .input-with-suffix input {
+    width: 100%;
+    padding: 0.75rem 2rem 0.75rem 0.75rem;
+    border: 2px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+  }
+
+  .input-with-suffix .suffix {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6b7280;
+    font-weight: 600;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .btn-primary {
+    background: #667eea;
+    color: white;
+    border-color: #5568d3;
+  }
+
+  .btn-secondary {
+    background: white;
+    color: #374151;
+    border-color: #d1d5db;
+  }
+
+  .alert {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .alert-success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #10b981;
+  }
+</style>
+
 <div class="form-container">
     <div class="deck-header">
         <h2>{{ deck.name }} - Rarity Drop Rates</h2>

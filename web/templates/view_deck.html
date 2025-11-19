@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}View Deck - {{ deck.name }}{% endblock %}
+
+{% block content %}
+<style>
+  .view-deck-container {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+
+  .deck-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e5e7eb;
+  }
+
+  .deck-header h1 {
+    margin: 0 0 0.5rem 0;
+    color: #374151;
+  }
+
+  .deck-meta {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
+  }
+
+  .deck-description {
+    background: #f9fafb;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    color: #374151;
+  }
+
+  .deck-stats {
+    display: flex;
+    gap: 2rem;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .stat-label {
+    color: #6b7280;
+    font-size: 0.875rem;
+  }
+
+  .stat-value {
+    font-weight: 600;
+    color: #374151;
+    font-size: 1.1rem;
+  }
+
+  .cards-section {
+    margin-top: 2rem;
+  }
+
+  .cards-section h2 {
+    margin: 0 0 1rem 0;
+    color: #374151;
+  }
+
+  .cards-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .card-item {
+    background: #f9fafb;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .card-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    gap: 1rem;
+  }
+
+  .card-title {
+    flex: 1;
+  }
+
+  .card-title h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.25rem;
+    color: #374151;
+  }
+
+  .card-thumbnail {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 2px solid #e5e7eb;
+  }
+
+  .card-thumbnail-placeholder {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e5e7eb;
+    border-radius: 6px;
+    font-size: 2rem;
+    color: #9ca3af;
+  }
+
+  .rarity-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .rarity-Common { background: #d1d5db; color: #374151; }
+  .rarity-Uncommon { background: #86efac; color: #065f46; }
+  .rarity-Exceptional { background: #7dd3fc; color: #0c4a6e; }
+  .rarity-Rare { background: #a5b4fc; color: #312e81; }
+  .rarity-Epic { background: #d8b4fe; color: #581c87; }
+  .rarity-Legendary { background: #fbbf24; color: #78350f; }
+  .rarity-Mythic { background: #fb923c; color: #7c2d12; }
+
+  .card-description {
+    color: #6b7280;
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  .card-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .field-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .field-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .field-value {
+    color: #374151;
+    font-weight: 500;
+  }
+
+  .merge-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .btn-secondary {
+    background: white;
+    color: #374151;
+    border-color: #d1d5db;
+  }
+
+  .btn-secondary:hover {
+    background: #f9fafb;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: #6b7280;
+    padding: 3rem;
+    font-style: italic;
+  }
+
+  .back-button {
+    margin-bottom: 1.5rem;
+  }
+</style>
+
+<div class="view-deck-container">
+  <div class="back-button">
+    <a href="/marketplace" class="btn btn-secondary">← Back to Marketplace</a>
+  </div>
+
+  <div class="deck-header">
+    <h1>{{ deck.name }}</h1>
+    <div class="deck-meta">
+      Created by: {{ deck.created_by }}
+      {% if deck.is_public %}
+        <span style="color: #10b981; font-weight: 600;">• Public Deck</span>
+      {% endif %}
+    </div>
+    
+    {% if deck.public_description %}
+    <div class="deck-description">
+      {{ deck.public_description }}
+    </div>
+    {% endif %}
+
+    <div class="deck-stats">
+      <div class="stat-item">
+        <span class="stat-label">Total Cards</span>
+        <span class="stat-value">{{ cards|length }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Free Pack Cooldown</span>
+        <span class="stat-value">{{ deck.free_pack_cooldown_hours }} hours</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards-section">
+    <h2>Cards in this Deck</h2>
+    
+    {% if cards %}
+    <div class="cards-grid">
+      {% for card in cards %}
+      <div class="card-item">
+        <div class="card-header">
+          <div class="card-title">
+            <h3>
+              {{ card.name }}
+              <span class="rarity-badge rarity-{{ card.rarity }}">{{ card.rarity }}</span>
+              {% if card.mergeable %}
+              <span class="merge-info">⚡ Mergeable (Max Lvl {{ card.max_merge_level or 10 }})</span>
+              {% endif %}
+            </h3>
+            <p class="card-description">{{ card.description }}</p>
+          </div>
+          
+          {% if card.image_url %}
+          <img src="{{ card.image_url }}" alt="{{ card.name }}" class="card-thumbnail">
+          {% else %}
+          <div class="card-thumbnail-placeholder">🚀</div>
+          {% endif %}
+        </div>
+
+        {% if template_fields %}
+        <div class="card-fields">
+          {% for field in template_fields %}
+          {% set field_val = card_field_values.get(card.card_id, {}).get(field.template_id, '') %}
+          {% if field_val %}
+          <div class="field-item">
+            <span class="field-label">{{ field.field_name }}</span>
+            <span class="field-value">{{ field_val }}</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>This deck doesn't have any cards yet.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

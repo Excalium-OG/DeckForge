@@ -3,31 +3,168 @@
 {% block title %}Login - DeckForge Admin Portal{% endblock %}
 
 {% block content %}
-<div class="login-container">
-    <div class="login-card">
-        <h2>🚀 Welcome to DeckForge</h2>
-        <p>Admin Portal for Managing Collectible Rocket Trading Cards</p>
-        
-        {% if request.query_params.get('error') == 'auth_failed' %}
-        <div class="alert alert-error">
-            Authentication failed. Please try again.
-        </div>
-        {% endif %}
-        
-        <a href="/login" class="btn btn-discord">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
-            </svg>
-            Login with Discord
-        </a>
-        
-        <div class="info-section">
-            <h3>Access Requirements:</h3>
-            <ul>
-                <li>Global Admin: Full access to all decks and servers</li>
-                <li>Server Manager: Manage decks for your Discord servers</li>
-            </ul>
-        </div>
+<style>
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  .top-bar {
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    color: #333;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .top-bar .nav-links {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .top-bar .nav-links a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .top-bar .login-btn {
+    background-color: #667eea;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .main-container {
+    display: flex;
+    padding: 2rem;
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .login-card {
+    flex: 2;
+    background-color: white;
+    padding: 2.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+
+  .update-pane {
+    flex: 1;
+    background-color: white;
+    padding: 1.5rem;
+    overflow-y: auto;
+    max-height: 600px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+
+  .update-pane h3 {
+    margin-top: 0;
+  }
+
+  .btn-discord {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #5865F2;
+    color: white;
+    padding: 0.6rem 1.2rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    text-decoration: none;
+    margin-top: 1rem;
+  }
+
+  .info-section {
+    margin-top: 1.5rem;
+  }
+
+  .summary-section {
+    margin-top: 1.5rem;
+    background-color: #f0f9ff;
+    padding: 1.5rem;
+    border-radius: 8px;
+  }
+
+  .invite-link {
+    margin-top: 1rem;
+    font-weight: 600;
+  }
+
+  .invite-link a {
+    color: #667eea;
+    text-decoration: none;
+  }
+
+  .alert {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .alert-error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #ef4444;
+  }
+</style>
+
+<div class="top-bar">
+  <div class="nav-links">
+    <a href="/faq">FAQ</a>
+    <a href="/about">About</a>
+    <!-- Add more links here -->
+  </div>
+  <a href="/login" class="login-btn">Login with Discord</a>
+</div>
+
+<div class="main-container">
+  <div class="login-card">
+    <h2>🚀 Welcome to DeckForge</h2>
+    <p>Admin Portal for Managing Collectible Card Decks</p>
+
+    {% if request.query_params.get('error') == 'auth_failed' %}
+    <div class="alert alert-error">
+      Authentication failed. Please try again.
     </div>
+    {% endif %}
+
+    <div class="summary-section">
+      <h3>🧠 What is DeckForge?</h3>
+      <p>DeckForge is a customizable Discord bot platform for creating, collecting, and trading themed card decks. Whether you're into rockets, memes, fantasy, or fandoms — DeckForge lets you build your own universe.</p>
+      <div class="invite-link">
+        🔗 <a href="https://discord.com/oauth2/authorize?client_id=1428049552484733059&permissions=277025777728&integration_type=0&scope=bot+applications.commands">Invite DeckForge to your server</a>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <h3>Access Requirements:</h3>
+      <ul>
+        <li>You must be a server manager with permission to add bots.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="update-pane">
+    <h3>🛠 Patch Notes</h3>
+    <ul>
+      <li><strong>Oct 29, 2025:</strong> Deck adoption now links to global inventory</li>
+      <li><strong>Oct 27, 2025:</strong> Added rarity editor to web portal</li>
+      <li><strong>Oct 25, 2025:</strong> Improved pack drop logic</li>
+      <li><strong>Oct 22, 2025:</strong> Marketplace UI enhancements</li>
+      <li><strong>Oct 20, 2025:</strong> New card template system launched</li>
+      <!-- Add more updates here -->
+    </ul>
+  </div>
 </div>
 {% endblock %}

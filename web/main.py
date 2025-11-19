@@ -12,6 +12,7 @@ import httpx
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 from object_storage import ObjectStorageService
+from fastapi.staticfiles import StaticFiles as BaseStaticFiles
 
 # Initialize FastAPI app
 app = FastAPI(title="DeckForge Admin Portal")
@@ -25,7 +26,7 @@ app.add_middleware(
 )
 
 # Mount static files and templates with no-cache headers
-from fastapi.staticfiles import StaticFiles as BaseStaticFiles
+
 
 class NoCacheStaticFiles(BaseStaticFiles):
     def __init__(self, *args, **kwargs):
@@ -463,7 +464,7 @@ async def marketplace(request: Request, user = Depends(require_auth)):
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT deck_id, name, created_by, created_at, public_description FROM decks WHERE is_public = TRUE AND (public_visible IS NULL OR public_visible = TRUE) ORDER BY created_at DESC"
+            "SELECT deck_id, name, created_by, created_at, public_description FROM decks WHERE is_public = TRUE ORDER BY created_at DESC"
         )
     decks = [dict(r) for r in rows]
 
@@ -509,7 +510,7 @@ async def adopt_deck(deck_id: int, guild_id: int = Form(...), user = Depends(req
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         public_deck = await conn.fetchrow(
-            "SELECT * FROM decks WHERE deck_id = $1 AND is_public = TRUE AND (public_visible IS NULL OR public_visible = TRUE)",
+            "SELECT * FROM decks WHERE deck_id = $1 AND is_public = TRUE",
             deck_id
         )
         if not public_deck:
@@ -574,6 +575,59 @@ async def adopt_deck(deck_id: int, guild_id: int = Form(...), user = Depends(req
             )
 
     return RedirectResponse(url="/dashboard", status_code=303)
+
+@app.get("/deck/{deck_id}/view", response_class=HTMLResponse)
+async def view_deck(request: Request, deck_id: int, user = Depends(require_auth)):
+    """View-only page for browsing deck contents (for public decks in marketplace)"""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get deck info - allow viewing public decks or owned decks
+        deck = await conn.fetchrow(
+            """SELECT deck_id, name, created_by, is_public, public_description, free_pack_cooldown_hours
+               FROM decks WHERE deck_id = $1""",
+            deck_id
+        )
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        deck = dict(deck)
+        
+        # Check if user can view this deck (public or owned by user or global admin)
+        if not deck.get('is_public') and deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="This deck is private")
+        
+        # Get all cards in the deck
+        cards = await conn.fetch(
+            """SELECT card_id, name, description, rarity, image_url, mergeable, max_merge_level
+               FROM cards WHERE deck_id = $1 ORDER BY rarity, name""",
+            deck_id
+        )
+        cards_list = [dict(c) for c in cards]
+        
+        # Get template fields for this deck
+        template_fields = await conn.fetch(
+            """SELECT template_id, field_name, field_type, dropdown_options, field_order, is_required
+               FROM card_templates WHERE deck_id = $1 ORDER BY field_order""",
+            deck_id
+        )
+        
+        # Get field values for all cards
+        card_field_values = {}
+        for card in cards_list:
+            field_values = await conn.fetch(
+                """SELECT template_id, field_value FROM card_template_fields WHERE card_id = $1""",
+                card['card_id']
+            )
+            card_field_values[card['card_id']] = {fv['template_id']: fv['field_value'] for fv in field_values}
+        
+        return templates.TemplateResponse("view_deck.html", {
+            "request": request,
+            "user": user,
+            "deck": deck,
+            "cards": cards_list,
+            "template_fields": template_fields,
+            "card_field_values": card_field_values
+        })
 
 @app.get("/deck/create", response_class=HTMLResponse)
 async def create_deck_form(request: Request, user = Depends(require_admin)):
@@ -674,6 +728,23 @@ async def edit_deck_form(request: Request, deck_id: int, user = Depends(require_
             deck_id
         )
         
+        # Get number-type template fields for merge perks dropdown
+        number_template_fields = await conn.fetch(
+            """SELECT template_id, field_name FROM card_templates 
+               WHERE deck_id = $1 AND field_type = 'number'
+               ORDER BY field_name""",
+            deck_id
+        )
+        
+        # Get existing merge perks for this deck
+        merge_perks = await conn.fetch(
+            """SELECT perk_name, base_boost, diminishing_factor 
+               FROM deck_merge_perks 
+               WHERE deck_id = $1 
+               ORDER BY perk_name""",
+            deck_id
+        )
+        
         # Get cards in this deck with their template field values
         cards = await conn.fetch(
             """SELECT c.*, 
@@ -694,6 +765,8 @@ async def edit_deck_form(request: Request, deck_id: int, user = Depends(require_
         "request": request,
         "user": user,
         "template_fields": template_fields,
+        "number_template_fields": number_template_fields,
+        "merge_perks": merge_perks,
         "deck": dict(deck),
         "cards": [dict(c) for c in cards]
     })
@@ -706,9 +779,11 @@ async def add_card_to_deck(
     description: str = Form(...),
     rarity: str = Form(...),
     image_url: str = Form(None),
+    mergeable: bool = Form(False),
+    max_merge_level: int = Form(10),
     user = Depends(require_admin)
 ):
-    """Add a card to a deck with template field values"""
+    """Add a card to a deck with template field values and merge configuration"""
     pool = await get_db_pool()
     form_data = await request.form()
     
@@ -725,12 +800,12 @@ async def add_card_to_deck(
         if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
             raise HTTPException(status_code=403, detail="You don't own this deck")
         
-        # Insert card with basic fields only
+        # Insert card with basic fields and merge configuration
         card = await conn.fetchrow(
-            """INSERT INTO cards (deck_id, name, description, rarity, image_url, created_by)
-               VALUES ($1, $2, $3, $4, $5, $6)
+            """INSERT INTO cards (deck_id, name, description, rarity, image_url, created_by, mergeable, max_merge_level)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                RETURNING card_id""",
-            deck_id, name, description, rarity, image_url, user['id']
+            deck_id, name, description, rarity, image_url, user['id'], mergeable, max_merge_level
         )
         
         # Get template fields for this deck
@@ -783,6 +858,238 @@ async def delete_card_from_deck(
             "DELETE FROM cards WHERE card_id = $1 AND deck_id = $2",
             card_id, deck_id
         )
+    
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
+@app.post("/deck/{deck_id}/merge_perk/add")
+async def add_merge_perk(
+    request: Request,
+    deck_id: int,
+    perk_name: str = Form(...),
+    base_boost: float = Form(...),
+    user = Depends(require_admin)
+):
+    """Add a merge perk to a deck"""
+    pool = await get_db_pool()
+    
+    # Validate base_boost
+    if base_boost < 0.1 or base_boost > 100:
+        raise HTTPException(status_code=400, detail="Base boost must be between 0.1 and 100")
+    
+    async with pool.acquire() as conn:
+        # Verify deck ownership
+        deck = await conn.fetchrow(
+            "SELECT created_by FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Insert merge perk (using default diminishing_factor of 0.85)
+        try:
+            await conn.execute(
+                """INSERT INTO deck_merge_perks (deck_id, perk_name, base_boost, diminishing_factor)
+                   VALUES ($1, $2, $3, 0.85)""",
+                deck_id, perk_name, base_boost
+            )
+        except Exception as e:
+            # Handle duplicate perk name
+            if 'duplicate key' in str(e).lower():
+                raise HTTPException(status_code=400, detail=f"Merge perk '{perk_name}' already exists for this deck")
+            raise
+    
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
+@app.post("/deck/{deck_id}/merge_perk/{perk_name}/delete")
+async def delete_merge_perk(
+    request: Request,
+    deck_id: int,
+    perk_name: str,
+    user = Depends(require_admin)
+):
+    """Delete a merge perk from a deck"""
+    pool = await get_db_pool()
+    
+    async with pool.acquire() as conn:
+        # Verify deck ownership
+        deck = await conn.fetchrow(
+            "SELECT created_by FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Delete merge perk
+        await conn.execute(
+            "DELETE FROM deck_merge_perks WHERE deck_id = $1 AND perk_name = $2",
+            deck_id, perk_name
+        )
+    
+    return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
+
+@app.get("/deck/{deck_id}/card/{card_id}/edit", response_class=HTMLResponse)
+async def edit_card_form(request: Request, deck_id: int, card_id: int, user = Depends(require_admin)):
+    """Show card editing form"""
+    pool = await get_db_pool()
+    
+    async with pool.acquire() as conn:
+        # Get deck info
+        deck = await conn.fetchrow(
+            "SELECT * FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        # Check permissions
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Get card info
+        card = await conn.fetchrow(
+            "SELECT * FROM cards WHERE card_id = $1 AND deck_id = $2",
+            card_id, deck_id
+        )
+        
+        if not card:
+            raise HTTPException(status_code=404, detail="Card not found")
+        
+        # Get template fields for this deck
+        template_fields = await conn.fetch(
+            """SELECT * FROM card_templates 
+               WHERE deck_id = $1 
+               ORDER BY field_order""",
+            deck_id
+        )
+        
+        # Get existing field values for this card
+        field_values_rows = await conn.fetch(
+            """SELECT template_id, field_value 
+               FROM card_template_fields 
+               WHERE card_id = $1""",
+            card_id
+        )
+        
+        # Convert to dictionary for easy lookup
+        field_values = {row['template_id']: row['field_value'] for row in field_values_rows}
+    
+    return templates.TemplateResponse("edit_card.html", {
+        "request": request,
+        "user": user,
+        "deck": dict(deck),
+        "card": dict(card),
+        "template_fields": template_fields,
+        "field_values": field_values
+    })
+
+@app.post("/deck/{deck_id}/card/{card_id}/update")
+async def update_card(
+    request: Request,
+    deck_id: int,
+    card_id: int,
+    name: str = Form(...),
+    description: str = Form(...),
+    rarity: str = Form(...),
+    image_url: str = Form(None),
+    mergeable: bool = Form(False),
+    max_merge_level: int = Form(0),
+    user = Depends(require_admin)
+):
+    """Update an existing card with all editable attributes"""
+    pool = await get_db_pool()
+    form_data = await request.form()
+    
+    # If not mergeable, set max_merge_level to 0
+    if not mergeable:
+        max_merge_level = 0
+    
+    async with pool.acquire() as conn:
+        # Verify deck ownership
+        deck = await conn.fetchrow(
+            "SELECT created_by FROM decks WHERE deck_id = $1",
+            deck_id
+        )
+        
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+        
+        if deck['created_by'] != user['id'] and not is_global_admin(user['id']):
+            raise HTTPException(status_code=403, detail="You don't own this deck")
+        
+        # Verify card belongs to this deck
+        card = await conn.fetchrow(
+            "SELECT card_id FROM cards WHERE card_id = $1 AND deck_id = $2",
+            card_id, deck_id
+        )
+        
+        if not card:
+            raise HTTPException(status_code=404, detail="Card not found in this deck")
+        
+        # Normalize blank image_url to NULL
+        if image_url == '':
+            image_url = None
+        
+        # Use transaction to ensure atomicity
+        async with conn.transaction():
+            # Update card basic fields
+            await conn.execute(
+                """UPDATE cards 
+                   SET name = $1, description = $2, rarity = $3, image_url = $4, 
+                       mergeable = $5, max_merge_level = $6
+                   WHERE card_id = $7""",
+                name, description, rarity, image_url, mergeable, max_merge_level, card_id
+            )
+            
+            # Get template fields for this deck
+            template_fields = await conn.fetch(
+                "SELECT template_id FROM card_templates WHERE deck_id = $1",
+                deck_id
+            )
+            
+            # Update template field values
+            for template_field in template_fields:
+                template_id = template_field['template_id']
+                field_key = f"template_field_{template_id}"
+                
+                if field_key in form_data:
+                    field_value = form_data.get(field_key)
+                    
+                    # Check if value already exists
+                    existing = await conn.fetchrow(
+                        """SELECT field_value FROM card_template_fields 
+                           WHERE card_id = $1 AND template_id = $2""",
+                        card_id, template_id
+                    )
+                    
+                    if field_value:  # Update or insert non-empty values
+                        if existing:
+                            await conn.execute(
+                                """UPDATE card_template_fields 
+                                   SET field_value = $1 
+                                   WHERE card_id = $2 AND template_id = $3""",
+                                field_value, card_id, template_id
+                            )
+                        else:
+                            await conn.execute(
+                                """INSERT INTO card_template_fields (card_id, template_id, field_value)
+                                   VALUES ($1, $2, $3)""",
+                                card_id, template_id, field_value
+                            )
+                    elif existing:  # Delete empty values
+                        await conn.execute(
+                            """DELETE FROM card_template_fields 
+                               WHERE card_id = $1 AND template_id = $2""",
+                            card_id, template_id
+                        )
     
     return RedirectResponse(url=f"/deck/{deck_id}/edit", status_code=303)
 

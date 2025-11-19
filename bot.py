@@ -3,6 +3,7 @@ DeckForge - Discord Trading Card Bot
 Main bot file with database connection pooling and cog loading
 """
 import discord
+from discord import app_commands
 from discord.ext import commands
 import asyncpg
 import os
@@ -61,6 +62,7 @@ class DeckForgeBot(commands.Bot):
         await self.load_extension('cogs.cards')
         await self.load_extension('cogs.packs')
         await self.load_extension('cogs.trading')
+        await self.load_extension('cogs.merge')  # Card merge system
         await self.load_extension('cogs.future')
         await self.load_extension('cogs.slash_commands')  # Slash command support
         print("✅ Loaded all cogs")
@@ -74,7 +76,10 @@ class DeckForgeBot(commands.Bot):
             'db/migrations/0004_phase2_extensions.sql',
             'db/migrations/0005_web_admin.sql',
             'db/migrations/0006_oauth_states.sql',
-            'db/migrations/0007_card_templates.sql'
+            'db/migrations/0007_card_templates.sql',
+            'db/migrations/0008_merge_system.sql',
+            'db/migrations/0009_trade_merge_levels.sql',
+            'db/migrations/0010_field_overrides.sql'
         ]
         
         async with self.db_pool.acquire() as conn:
@@ -109,7 +114,7 @@ class DeckForgeBot(commands.Bot):
         print("-" * 50)
     
     async def on_command_error(self, ctx, error):
-        """Global error handler"""
+        """Global error handler for regular commands"""
         if isinstance(error, commands.CommandNotFound):
             return
         elif isinstance(error, commands.MissingRequiredArgument):
@@ -121,6 +126,28 @@ class DeckForgeBot(commands.Bot):
         else:
             await ctx.send(f"❌ An error occurred: {str(error)}")
             print(f"Error in command {ctx.command}: {error}")
+    
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Global error handler for slash commands"""
+        import traceback
+        
+        # Log the full error
+        print(f"❌ Error in slash command: {error}")
+        print(f"   Command: {interaction.command.name if interaction.command else 'Unknown'}")
+        print(f"   User: {interaction.user}")
+        print(f"   Guild: {interaction.guild}")
+        traceback.print_exception(type(error), error, error.__traceback__)
+        
+        # Try to respond to the user
+        error_message = f"❌ An error occurred: {str(error)}"
+        
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(error_message, ephemeral=True)
+            else:
+                await interaction.response.send_message(error_message, ephemeral=True)
+        except Exception as e:
+            print(f"Failed to send error message: {e}")
     
     async def close(self):
         """Cleanup on shutdown"""

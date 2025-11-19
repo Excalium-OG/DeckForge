@@ -4,10 +4,13 @@ Handles card trading between players with multi-step confirmation flow
 """
 import discord
 from discord.ext import commands
+from discord import app_commands
 import asyncpg
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict
+from typing import Optional, Dict, List
+
+from utils.merge_helpers import format_merge_level_display
 
 # Trade timeout duration
 TRADE_TIMEOUT_MINUTES = 5
@@ -53,7 +56,8 @@ class TradingCommands(commands.Cog):
                 """SELECT ti.*, c.name, c.rarity
                    FROM trade_items ti
                    JOIN cards c ON ti.card_id = c.card_id
-                   WHERE ti.trade_id = $1 AND ti.user_id = $2""",
+                   WHERE ti.trade_id = $1 AND ti.user_id = $2
+                   ORDER BY c.name, ti.merge_level""",
                 uuid.UUID(trade_id), user_id
             )
         else:
@@ -61,18 +65,146 @@ class TradingCommands(commands.Cog):
                 """SELECT ti.*, c.name, c.rarity
                    FROM trade_items ti
                    JOIN cards c ON ti.card_id = c.card_id
-                   WHERE ti.trade_id = $1""",
+                   WHERE ti.trade_id = $1
+                   ORDER BY c.name, ti.merge_level""",
                 uuid.UUID(trade_id)
             )
         return [dict(item) for item in items]
     
-    async def check_user_card_count(self, conn, user_id: int, card_id: int) -> int:
-        """Count how many non-recycled instances of a card a user owns"""
-        count = await conn.fetchval(
-            """SELECT COUNT(*) FROM user_cards
-               WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL""",
-            user_id, card_id
-        )
+    async def card_name_autocomplete_for_add(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> List[app_commands.Choice[str]]:
+        """
+        Autocomplete for card names when adding to trade
+        Shows cards the player owns with merge level indicators
+        """
+        user_id = interaction.user.id
+        guild_id = interaction.guild_id if interaction.guild else None
+        
+        if not guild_id:
+            return []
+        
+        # Get server's deck
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            return []
+        
+        deck_id = deck['deck_id']
+        
+        async with self.db_pool.acquire() as conn:
+            # Get all cards the player owns, grouped by card_id and merge_level
+            owned_cards = await conn.fetch(
+                """
+                SELECT 
+                    c.card_id,
+                    c.name,
+                    uc.merge_level,
+                    COUNT(*) as count
+                FROM user_cards uc
+                JOIN cards c ON uc.card_id = c.card_id
+                WHERE uc.user_id = $1 
+                  AND c.deck_id = $2
+                  AND uc.recycled_at IS NULL
+                GROUP BY c.card_id, c.name, uc.merge_level
+                ORDER BY c.name, uc.merge_level
+                """,
+                user_id, deck_id
+            )
+            
+            # Build choices with merge level indicator
+            choices = []
+            for card in owned_cards:
+                card_name = card['name']
+                card_id = card['card_id']
+                merge_level = card['merge_level']
+                count = card['count']
+                
+                # Add merge level indicator to display
+                display_level = format_merge_level_display(merge_level)
+                display_name = f"{card_name} {display_level} (x{count})"
+                
+                # Store card_name|card_id|merge_level as the value for lookup
+                value = f"{card_name}|{card_id}|{merge_level}"
+                
+                # Filter based on current input
+                if current.lower() in card_name.lower():
+                    choices.append(app_commands.Choice(name=display_name, value=value))
+            
+            # Return max 25 choices (Discord limit)
+            return choices[:25]
+    
+    async def card_name_autocomplete_for_remove(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> List[app_commands.Choice[str]]:
+        """
+        Autocomplete for card names when removing from trade
+        Shows only cards currently in the user's side of the trade
+        """
+        user_id = interaction.user.id
+        
+        async with self.db_pool.acquire() as conn:
+            # Get active trade
+            trade = await self.get_active_trade(conn, user_id)
+            if not trade:
+                return []
+            
+            trade_id = str(trade['trade_id'])
+            
+            # Get cards in the user's side of the trade
+            trade_items = await conn.fetch(
+                """
+                SELECT 
+                    ti.card_id,
+                    ti.merge_level,
+                    ti.quantity,
+                    c.name
+                FROM trade_items ti
+                JOIN cards c ON ti.card_id = c.card_id
+                WHERE ti.trade_id = $1 AND ti.user_id = $2
+                ORDER BY c.name, ti.merge_level
+                """,
+                uuid.UUID(trade_id), user_id
+            )
+            
+            # Build choices
+            choices = []
+            for item in trade_items:
+                card_name = item['name']
+                card_id = item['card_id']
+                merge_level = item['merge_level']
+                quantity = item['quantity']
+                
+                # Add merge level indicator to display
+                display_level = format_merge_level_display(merge_level)
+                display_name = f"{card_name} {display_level} (x{quantity})"
+                
+                # Store card_name|card_id|merge_level as the value for lookup
+                value = f"{card_name}|{card_id}|{merge_level}"
+                
+                # Filter based on current input
+                if current.lower() in card_name.lower():
+                    choices.append(app_commands.Choice(name=display_name, value=value))
+            
+            return choices[:25]
+    
+    async def check_user_card_count(self, conn, user_id: int, card_id: int, merge_level: int = None) -> int:
+        """Count how many non-recycled instances of a card a user owns at a specific merge level"""
+        if merge_level is not None:
+            count = await conn.fetchval(
+                """SELECT COUNT(*) FROM user_cards
+                   WHERE user_id = $1 AND card_id = $2 AND merge_level = $3 AND recycled_at IS NULL""",
+                user_id, card_id, merge_level
+            )
+        else:
+            count = await conn.fetchval(
+                """SELECT COUNT(*) FROM user_cards
+                   WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL""",
+                user_id, card_id
+            )
         return count or 0
     
     async def display_trade_pool(self, ctx, trade: dict):
@@ -99,7 +231,7 @@ class TradingCommands(commands.Cog):
         # Initiator's offer
         if initiator_items:
             items_text = "\n".join([
-                f"• (x{item['quantity']}) **{item['name']}** (ID: {item['card_id']}) - {item['rarity']}"
+                f"• (x{item['quantity']}) **{item['name']}** {format_merge_level_display(item['merge_level'])} - {item['rarity']}"
                 for item in initiator_items
             ])
         else:
@@ -114,7 +246,7 @@ class TradingCommands(commands.Cog):
         # Responder's offer
         if responder_items:
             items_text = "\n".join([
-                f"• (x{item['quantity']}) **{item['name']}** (ID: {item['card_id']}) - {item['rarity']}"
+                f"• (x{item['quantity']}) **{item['name']}** {format_merge_level_display(item['merge_level'])} - {item['rarity']}"
                 for item in responder_items
             ])
         else:
@@ -148,12 +280,16 @@ class TradingCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='requesttrade')
+    @commands.hybrid_command(name='requesttrade')
     async def request_trade(self, ctx, member: discord.Member):
         """
         Initiate a trade with another user in this server.
         Usage: /requesttrade @user
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         initiator_id = ctx.author.id
         responder_id = member.id
         guild_id = ctx.guild.id if ctx.guild else None
@@ -223,12 +359,16 @@ class TradingCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='accepttrade')
+    @commands.hybrid_command(name='accepttrade')
     async def accept_trade(self, ctx):
         """
         Accept a trade request or confirm your acceptance of the trade terms.
         Usage: /accepttrade
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         
         async with self.db_pool.acquire() as conn:
@@ -264,8 +404,8 @@ class TradingCommands(commands.Cog):
                         description=(
                             f"{ctx.author.mention} accepted the trade!\n\n"
                             f"**Both players can now:**\n"
-                            f"• Add cards: `/tradeadd [card_id] [amount]`\n"
-                            f"• Remove cards: `/traderemove [card_id] [amount]`\n"
+                            f"• Add cards: `/tradeadd <card_name> [amount]`\n"
+                            f"• Remove cards: `/traderemove <card_name> [amount]`\n"
                             f"• When ready, both use `/accepttrade` to confirm\n"
                             f"• Then both use `/finalize` to complete the trade\n\n"
                             f"Trade expires in {TRADE_TIMEOUT_MINUTES} minutes."
@@ -328,12 +468,21 @@ class TradingCommands(commands.Cog):
             
             await ctx.send("❌ Invalid trade state. Please contact an admin.")
     
-    @commands.command(name='tradeadd')
-    async def trade_add(self, ctx, card_id: int, amount: int = 1):
+    @commands.hybrid_command(name='tradeadd')
+    @app_commands.describe(
+        card_name='The card to add to the trade (with merge level)',
+        amount='Number of cards to add (default: 1)'
+    )
+    @app_commands.autocomplete(card_name=card_name_autocomplete_for_add)
+    async def trade_add(self, ctx, card_name: str, amount: int = 1):
         """
         Add cards to your side of the trade.
-        Usage: /tradeadd [card_id] [amount]
+        Usage: /tradeadd <card_name> [amount]
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
@@ -356,6 +505,34 @@ class TradingCommands(commands.Cog):
         if amount < 1:
             await ctx.send("❌ Amount must be at least 1!")
             return
+        
+        # Parse card_name|card_id|merge_level from autocomplete value
+        # Format: "card_name|card_id|merge_level"
+        card_id = None
+        merge_level = 0
+        actual_card_name = card_name
+        
+        if '|' in card_name:
+            parts = card_name.rsplit('|', 2)
+            if len(parts) == 3:
+                actual_card_name, card_id_str, merge_level_str = parts
+                try:
+                    card_id = int(card_id_str)
+                    merge_level = int(merge_level_str)
+                except ValueError:
+                    pass
+        
+        # If card_id wasn't parsed from autocomplete, look it up by name
+        if card_id is None:
+            async with self.db_pool.acquire() as conn:
+                card_info = await conn.fetchrow(
+                    "SELECT card_id FROM cards WHERE LOWER(name) = LOWER($1) AND deck_id = $2",
+                    actual_card_name, deck_id
+                )
+                if not card_info:
+                    await ctx.send(f"❌ Card **{actual_card_name}** not found in this deck!")
+                    return
+                card_id = card_info['card_id']
         
         async with self.db_pool.acquire() as conn:
             trade = await self.get_active_trade(conn, user_id)
@@ -393,33 +570,34 @@ class TradingCommands(commands.Cog):
                 )
                 return
             
-            # Check user's inventory
-            user_count = await self.check_user_card_count(conn, user_id, card_id)
+            # Check user's inventory at the specific merge level
+            user_count = await self.check_user_card_count(conn, user_id, card_id, merge_level)
             
-            # Check how many already in trade
+            # Check how many already in trade at this merge level
             current_trade_qty = await conn.fetchval(
                 """SELECT quantity FROM trade_items
-                   WHERE trade_id = $1 AND user_id = $2 AND card_id = $3""",
-                trade_id, user_id, card_id
+                   WHERE trade_id = $1 AND user_id = $2 AND card_id = $3 AND merge_level = $4""",
+                trade_id, user_id, card_id, merge_level
             ) or 0
             
             total_needed = current_trade_qty + amount
             
             if user_count < total_needed:
+                merge_display = format_merge_level_display(merge_level)
                 await ctx.send(
-                    f"❌ You don't have enough **{card['name']}** cards!\n"
+                    f"❌ You don't have enough **{card['name']}** {merge_display} cards!\n"
                     f"You have: **{user_count}**, already in trade: **{current_trade_qty}**, "
                     f"trying to add: **{amount}**"
                 )
                 return
             
-            # Add to trade
+            # Add to trade with merge level tracking
             await conn.execute(
-                """INSERT INTO trade_items (trade_id, user_id, card_id, quantity)
-                   VALUES ($1, $2, $3, $4)
-                   ON CONFLICT (trade_id, user_id, card_id)
-                   DO UPDATE SET quantity = trade_items.quantity + $4""",
-                trade_id, user_id, card_id, amount
+                """INSERT INTO trade_items (trade_id, user_id, card_id, merge_level, quantity)
+                   VALUES ($1, $2, $3, $4, $5)
+                   ON CONFLICT (trade_id, user_id, card_id, merge_level)
+                   DO UPDATE SET quantity = trade_items.quantity + $5""",
+                trade_id, user_id, card_id, merge_level, amount
             )
             
             # Reset acceptances when trade pool changes
@@ -433,7 +611,8 @@ class TradingCommands(commands.Cog):
                     trade_id
                 )
         
-        await ctx.send(f"✅ Added **{amount}x {card['name']}** to the trade!")
+        merge_display = format_merge_level_display(merge_level)
+        await ctx.send(f"✅ Added **{amount}x {card['name']}** {merge_display} to the trade!")
         
         # Refresh and display trade pool
         async with self.db_pool.acquire() as conn:
@@ -443,17 +622,42 @@ class TradingCommands(commands.Cog):
             )
             await self.display_trade_pool(ctx, dict(updated_trade))
     
-    @commands.command(name='traderemove')
-    async def trade_remove(self, ctx, card_id: int, amount: int = 1):
+    @commands.hybrid_command(name='traderemove')
+    @app_commands.describe(
+        card_name='The card to remove from the trade (with merge level)',
+        amount='Number of cards to remove (default: 1)'
+    )
+    @app_commands.autocomplete(card_name=card_name_autocomplete_for_remove)
+    async def trade_remove(self, ctx, card_name: str, amount: int = 1):
         """
         Remove cards from your side of the trade.
-        Usage: /traderemove [card_id] [amount]
+        Usage: /traderemove <card_name> [amount]
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         
         if amount < 1:
             await ctx.send("❌ Amount must be at least 1!")
             return
+        
+        # Parse card_name|card_id|merge_level from autocomplete value
+        # Format: "card_name|card_id|merge_level"
+        card_id = None
+        merge_level = 0
+        actual_card_name = card_name
+        
+        if '|' in card_name:
+            parts = card_name.rsplit('|', 2)
+            if len(parts) == 3:
+                actual_card_name, card_id_str, merge_level_str = parts
+                try:
+                    card_id = int(card_id_str)
+                    merge_level = int(merge_level_str)
+                except ValueError:
+                    pass
         
         async with self.db_pool.acquire() as conn:
             trade = await self.get_active_trade(conn, user_id)
@@ -464,15 +668,32 @@ class TradingCommands(commands.Cog):
             
             trade_id = trade['trade_id']
             
-            # Get current quantity in trade
+            # If card_id wasn't parsed, look it up by name
+            if card_id is None:
+                card_info = await conn.fetchrow(
+                    """SELECT ti.card_id, ti.merge_level, c.name
+                       FROM trade_items ti
+                       JOIN cards c ON ti.card_id = c.card_id
+                       WHERE ti.trade_id = $1 AND ti.user_id = $2 AND LOWER(c.name) = LOWER($3)
+                       LIMIT 1""",
+                    trade_id, user_id, actual_card_name
+                )
+                if not card_info:
+                    await ctx.send(f"❌ You don't have **{actual_card_name}** in the trade!")
+                    return
+                card_id = card_info['card_id']
+                merge_level = card_info['merge_level']
+            
+            # Get current quantity in trade at this merge level
             current_qty = await conn.fetchval(
                 """SELECT quantity FROM trade_items
-                   WHERE trade_id = $1 AND user_id = $2 AND card_id = $3""",
-                trade_id, user_id, card_id
+                   WHERE trade_id = $1 AND user_id = $2 AND card_id = $3 AND merge_level = $4""",
+                trade_id, user_id, card_id, merge_level
             )
             
             if not current_qty:
-                await ctx.send(f"❌ You don't have card ID `{card_id}` in the trade!")
+                merge_display = format_merge_level_display(merge_level)
+                await ctx.send(f"❌ You don't have **{actual_card_name}** {merge_display} in the trade!")
                 return
             
             if current_qty < amount:
@@ -481,7 +702,7 @@ class TradingCommands(commands.Cog):
                 )
                 return
             
-            # Get card name
+            # Get card name for confirmation message
             card = await conn.fetchrow(
                 "SELECT name FROM cards WHERE card_id = $1",
                 card_id
@@ -493,15 +714,15 @@ class TradingCommands(commands.Cog):
             if new_qty == 0:
                 await conn.execute(
                     """DELETE FROM trade_items
-                       WHERE trade_id = $1 AND user_id = $2 AND card_id = $3""",
-                    trade_id, user_id, card_id
+                       WHERE trade_id = $1 AND user_id = $2 AND card_id = $3 AND merge_level = $4""",
+                    trade_id, user_id, card_id, merge_level
                 )
             else:
                 await conn.execute(
                     """UPDATE trade_items
-                       SET quantity = $4
-                       WHERE trade_id = $1 AND user_id = $2 AND card_id = $3""",
-                    trade_id, user_id, card_id, new_qty
+                       SET quantity = $5
+                       WHERE trade_id = $1 AND user_id = $2 AND card_id = $3 AND merge_level = $4""",
+                    trade_id, user_id, card_id, merge_level, new_qty
                 )
             
             # Reset acceptances when trade pool changes
@@ -515,7 +736,8 @@ class TradingCommands(commands.Cog):
                     trade_id
                 )
         
-        await ctx.send(f"✅ Removed **{amount}x {card['name']}** from the trade!")
+        merge_display = format_merge_level_display(merge_level)
+        await ctx.send(f"✅ Removed **{amount}x {card['name']}** {merge_display} from the trade!")
         
         # Refresh and display trade pool
         async with self.db_pool.acquire() as conn:
@@ -525,12 +747,16 @@ class TradingCommands(commands.Cog):
             )
             await self.display_trade_pool(ctx, dict(updated_trade))
     
-    @commands.command(name='finalize')
+    @commands.hybrid_command(name='finalize')
     async def finalize_trade(self, ctx):
         """
         Finalize and execute the trade (both players must confirm).
         Usage: /finalize
         """
+        # Defer for slash commands
+        if ctx.interaction:
+            await ctx.defer()
+        
         user_id = ctx.author.id
         guild_id = ctx.guild.id if ctx.guild else None
         
@@ -593,32 +819,34 @@ class TradingCommands(commands.Cog):
             
             # Execute trade in a transaction
             async with conn.transaction():
-                # Verify both users still have the cards
+                # Verify both users still have the cards at specific merge levels
                 for item in initiator_items:
-                    count = await self.check_user_card_count(conn, trade['initiator_id'], item['card_id'])
+                    count = await self.check_user_card_count(conn, trade['initiator_id'], item['card_id'], item['merge_level'])
                     if count < item['quantity']:
+                        merge_display = format_merge_level_display(item['merge_level'])
                         await ctx.send(
-                            f"❌ Trade failed! Initiator no longer has enough **{item['name']}** cards."
+                            f"❌ Trade failed! Initiator no longer has enough **{item['name']}** {merge_display} cards."
                         )
                         return
                 
                 for item in responder_items:
-                    count = await self.check_user_card_count(conn, trade['responder_id'], item['card_id'])
+                    count = await self.check_user_card_count(conn, trade['responder_id'], item['card_id'], item['merge_level'])
                     if count < item['quantity']:
+                        merge_display = format_merge_level_display(item['merge_level'])
                         await ctx.send(
-                            f"❌ Trade failed! Responder no longer has enough **{item['name']}** cards."
+                            f"❌ Trade failed! Responder no longer has enough **{item['name']}** {merge_display} cards."
                         )
                         return
                 
                 # Transfer initiator's cards to responder
                 for item in initiator_items:
-                    # Get oldest instances
+                    # Get oldest instances at the specific merge level
                     instances = await conn.fetch(
                         """SELECT instance_id FROM user_cards
-                           WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL
+                           WHERE user_id = $1 AND card_id = $2 AND merge_level = $3 AND recycled_at IS NULL
                            ORDER BY acquired_at ASC
-                           LIMIT $3""",
-                        trade['initiator_id'], item['card_id'], item['quantity']
+                           LIMIT $4""",
+                        trade['initiator_id'], item['card_id'], item['merge_level'], item['quantity']
                     )
                     
                     instance_ids = [inst['instance_id'] for inst in instances]
@@ -633,12 +861,13 @@ class TradingCommands(commands.Cog):
                 
                 # Transfer responder's cards to initiator
                 for item in responder_items:
+                    # Get oldest instances at the specific merge level
                     instances = await conn.fetch(
                         """SELECT instance_id FROM user_cards
-                           WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL
+                           WHERE user_id = $1 AND card_id = $2 AND merge_level = $3 AND recycled_at IS NULL
                            ORDER BY acquired_at ASC
-                           LIMIT $3""",
-                        trade['responder_id'], item['card_id'], item['quantity']
+                           LIMIT $4""",
+                        trade['responder_id'], item['card_id'], item['merge_level'], item['quantity']
                     )
                     
                     instance_ids = [inst['instance_id'] for inst in instances]
@@ -671,7 +900,7 @@ class TradingCommands(commands.Cog):
             
             if initiator_items:
                 items_text = "\n".join([
-                    f"• (x{item['quantity']}) {item['name']}"
+                    f"• (x{item['quantity']}) {item['name']} {format_merge_level_display(item['merge_level'])}"
                     for item in initiator_items
                 ])
                 embed.add_field(
@@ -682,7 +911,7 @@ class TradingCommands(commands.Cog):
             
             if responder_items:
                 items_text = "\n".join([
-                    f"• (x{item['quantity']}) {item['name']}"
+                    f"• (x{item['quantity']}) {item['name']} {format_merge_level_display(item['merge_level'])}"
                     for item in responder_items
                 ])
                 embed.add_field(
