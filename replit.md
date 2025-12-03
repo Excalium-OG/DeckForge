@@ -25,7 +25,8 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Game Mechanics
 - **Pack System**: Three pack types (Normal, Booster, Booster+). Users can claim a free Normal Pack every 8 hours or purchase packs with credits. Packs have a 30-item inventory limit, and Booster Packs apply rarity multipliers.
-- **Card System**: Seven-tier rarity system (Common to Mythic) with configurable weighted drop rates per guild. Cards are instance-based (UUID) and sorted by rarity then alphabetically. Cards can be designated as mergeable with configurable max merge levels.
+- **Card System**: Seven-tier rarity system (Common to Mythic) with configurable weighted drop rates per deck. Cards are instance-based (UUID) and sorted by rarity then alphabetically. Cards can be designated as mergeable with configurable max merge levels.
+- **Drop Rate System**: Drop rates are managed at the deck level by deck creators only (via web portal). All servers that adopt a deck share the same drop rates. The `!viewdroprates` command shows the deck's current rates.
 - **Card Merge System**: Progressive card upgrading through merge operations. Mergeable cards can be combined (2 cards of same type and level → 1 card of next level). Features include:
   - **Perk Selection**: On first merge (level 0→1), players select a characteristic to boost from available merge perks
   - **Perk Locking**: Selected perk is locked for all future merges of that card instance. Cards with different locked perks cannot be merged together, preserving distinct progression paths.
@@ -47,8 +48,9 @@ Preferred communication style: Simple, everyday language.
   - **Safety Features**: 5-minute timeout, deck validation, and automatic acceptance reset when trade pool changes
 
 ### Web Admin Portal Features
-- **Dashboard**: Displays user info, managed Discord servers, assigned decks, and user-created decks.
-- **Deck Management**: Allows creation, editing (adding/deleting cards with detailed specifications), and viewing of cards within a deck.
+- **Dashboard**: Displays user info, managed Discord servers, assigned decks (showing both created and adopted decks), and deck assignment controls.
+- **Deck Adoption System**: Reference-based model where adopting a public deck from the marketplace creates a link to the original deck rather than cloning it. All servers using the same deck share identical content. Only deck creators can edit; adopters can view and use but not modify.
+- **Deck Management**: Allows creation, editing (adding/deleting cards with detailed specifications), and viewing of cards within a deck. Edit access restricted to deck creators only.
 - **Card Merge Configuration**: When creating cards, deck owners can designate cards as mergeable and set max merge levels (1-100, default 10).
 - **Rarity Rate Editor**: Configurable drop rates per rarity tier for decks, with real-time validation to ensure rates sum to 100%.
 - **Image Upload**: Direct file upload from client device using Replit object storage with presigned URLs for secure, scalable image hosting.
