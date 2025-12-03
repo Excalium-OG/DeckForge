@@ -226,6 +226,29 @@
         {% endif %}
     </div>
 
+    {% if adopted_decks %}
+    <div class="section">
+        <h3>📥 Adopted Decks</h3>
+        <p style="color: #6b7280; margin-bottom: 1rem; font-size: 0.9rem;">
+            These decks were adopted from the marketplace. Only the original creator can edit them.
+        </p>
+        <div class="deck-grid">
+            {% for deck in adopted_decks %}
+            <div class="deck-card" style="border-color: #a5b4fc;">
+                <h4>{{ deck.name }}</h4>
+                <p class="deck-meta">
+                    <span style="color: #667eea; font-weight: 600;">📥 Adopted</span>
+                    • Created by: {{ deck.created_by }}
+                </p>
+                <div class="deck-actions">
+                    <a href="/deck/{{ deck.deck_id }}/view" class="btn btn-sm btn-secondary">👁 View Cards</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="section">
         <h3>🎮 Your Discord Servers</h3>
         {% if guilds %}
@@ -244,9 +267,15 @@
                         {% if guild.deck_id %}
                         <p class="deck-assigned">
                             Deck assigned: 
+                            {% set deck_found = [] %}
                             {% for deck in decks %}
-                                {% if deck.deck_id == guild.deck_id %}{{ deck.name }}{% endif %}
+                                {% if deck.deck_id == guild.deck_id %}{{ deck.name }}{% set _ = deck_found.append(1) %}{% endif %}
                             {% endfor %}
+                            {% if not deck_found %}
+                                {% for deck in adopted_decks %}
+                                    {% if deck.deck_id == guild.deck_id %}{{ deck.name }} <span style="color: #667eea;">(adopted)</span>{% endif %}
+                                {% endfor %}
+                            {% endif %}
                         </p>
                         {% else %}
                         <p class="no-deck">No deck assigned</p>
@@ -261,6 +290,15 @@
                             {{ deck.name }}
                         </option>
                         {% endfor %}
+                        {% if adopted_decks %}
+                        <optgroup label="Adopted Decks">
+                            {% for deck in adopted_decks %}
+                            <option value="{{ deck.deck_id }}" {% if guild.deck_id == deck.deck_id %}selected{% endif %}>
+                                {{ deck.name }} (adopted)
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endif %}
                     </select>
                     <button type="submit" class="btn btn-sm btn-primary">Assign</button>
                 </form>
