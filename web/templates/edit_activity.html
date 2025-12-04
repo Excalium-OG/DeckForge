@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}{% if activity %}Edit{% else %}New{% endif %} Card Activity - {{ deck.name }}{% endblock %}
+
+{% block content %}
+<style>
+  .activity-form-container {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+
+  .form-header h2 {
+    margin: 0;
+  }
+
+  .info-box {
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+
+  .section {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+  }
+
+  .section h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: #374151;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: inherit;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: #667eea;
+  }
+
+  .form-group small {
+    display: block;
+    margin-top: 0.25rem;
+    color: #6b7280;
+    font-size: 0.875rem;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+
+  .rarity-scaling-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }
+
+  .rarity-scaling-table th,
+  .rarity-scaling-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .rarity-scaling-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .rarity-scaling-table input {
+    width: 80px;
+    padding: 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+
+  .rarity-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .rarity-Common { background: #9ca3af; color: white; }
+  .rarity-Uncommon { background: #10b981; color: white; }
+  .rarity-Exceptional { background: #3b82f6; color: white; }
+  .rarity-Rare { background: #8b5cf6; color: white; }
+  .rarity-Epic { background: #a855f7; color: white; }
+  .rarity-Legendary { background: #f59e0b; color: white; }
+  .rarity-Mythic { background: #ef4444; color: white; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .btn-primary {
+    background: #667eea;
+    color: white;
+    border-color: #5568d3;
+  }
+
+  .btn-secondary {
+    background: white;
+    color: #374151;
+    border-color: #d1d5db;
+  }
+
+  .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .checkbox-group input[type="checkbox"] {
+    width: auto;
+  }
+</style>
+
+<div class="activity-form-container">
+    <div class="form-header">
+        <h2>{% if activity %}Edit{% else %}New{% endif %} Card Activity</h2>
+        <a href="/deck/{{ deck.deck_id }}/activities" class="btn btn-secondary">Back to Activities</a>
+    </div>
+
+    <div class="info-box">
+        <strong>Tip:</strong> Use Mythic-level values as your basis. The system will automatically scale requirements, rewards, and duration based on rarity. 
+        Lower rarity missions have easier requirements but lower rewards. Higher rarity missions are harder but more rewarding.
+    </div>
+
+    <form method="POST" action="{% if activity %}/deck/{{ deck.deck_id }}/activity/{{ activity.mission_template_id }}/update{% else %}/deck/{{ deck.deck_id }}/activity/create{% endif %}">
+        <div class="section">
+            <h3>Basic Information</h3>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="name">Activity Name *</label>
+                    <input type="text" id="name" name="name" required 
+                           value="{{ activity.name if activity else '' }}"
+                           placeholder="e.g., Payload Delivery">
+                </div>
+                
+                <div class="form-group">
+                    <label for="activity_type">Activity Type *</label>
+                    <select id="activity_type" name="activity_type" required>
+                        <option value="mission" {% if not activity or activity.activity_type == 'mission' %}selected{% endif %}>Mission</option>
+                    </select>
+                    <small>More activity types (Versus, Tournament) coming soon!</small>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="3" 
+                          placeholder="Describe what this mission is about...">{{ activity.description if activity else '' }}</textarea>
+                <small>This description will be shown to players when the mission appears</small>
+            </div>
+            
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="is_active" name="is_active" value="1" 
+                           {% if not activity or activity.is_active %}checked{% endif %}>
+                    <label for="is_active" style="margin-bottom: 0;">Active</label>
+                </div>
+                <small>Inactive activities won't spawn new missions</small>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Mission Parameters (Mythic Baseline)</h3>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="requirement_field">Requirement Attribute *</label>
+                    <select id="requirement_field" name="requirement_field" required>
+                        <option value="">Select an attribute...</option>
+                        {% for field in numeric_fields %}
+                        <option value="{{ field.field_name }}" 
+                                {% if activity and activity.requirement_field == field.field_name %}selected{% endif %}>
+                            {{ field.field_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small>The card attribute that must meet the minimum requirement</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="min_value_base">Minimum Value (Mythic) *</label>
+                    <input type="number" id="min_value_base" name="min_value_base" required 
+                           step="0.01" min="0"
+                           value="{{ activity.min_value_base if activity else '' }}"
+                           placeholder="e.g., 85000">
+                    <small>The minimum attribute value required for Mythic-tier missions</small>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="reward_base">Reward Credits (Mythic) *</label>
+                    <input type="number" id="reward_base" name="reward_base" required 
+                           min="1" step="1"
+                           value="{{ activity.reward_base if activity else '' }}"
+                           placeholder="e.g., 1500">
+                    <small>Credits awarded on success for Mythic-tier missions</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="duration_base_hours">Duration Hours (Mythic) *</label>
+                    <input type="number" id="duration_base_hours" name="duration_base_hours" required 
+                           min="1" max="168" step="1"
+                           value="{{ activity.duration_base_hours if activity else '48' }}"
+                           placeholder="48">
+                    <small>Mission duration in hours for Mythic-tier missions (max 168 = 1 week)</small>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="variance_pct">Variance Percentage</label>
+                <input type="number" id="variance_pct" name="variance_pct" 
+                       min="0" max="50" step="0.5"
+                       value="{{ activity.variance_pct if activity else '5' }}"
+                       placeholder="5">
+                <small>Random +/- variance applied to requirements, rewards, and duration when spawning (default: 5%)</small>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Rarity Scaling</h3>
+            <p style="color: #6b7280; margin-bottom: 1rem;">
+                Configure how mission parameters scale based on rarity. Multipliers are applied to the Mythic baseline values.
+                Success rate determines the chance of mission success when the duration completes.
+            </p>
+            
+            <table class="rarity-scaling-table">
+                <thead>
+                    <tr>
+                        <th>Rarity</th>
+                        <th>Requirement Multiplier</th>
+                        <th>Reward Multiplier</th>
+                        <th>Duration Multiplier</th>
+                        <th>Success Rate (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set rarities = ['Common', 'Uncommon', 'Exceptional', 'Rare', 'Epic', 'Legendary', 'Mythic'] %}
+                    {% set default_scaling = {
+                        'Common': {'req': 0.3, 'reward': 0.2, 'dur': 0.5, 'rate': 40},
+                        'Uncommon': {'req': 0.4, 'reward': 0.3, 'dur': 0.6, 'rate': 50},
+                        'Exceptional': {'req': 0.5, 'reward': 0.4, 'dur': 0.7, 'rate': 60},
+                        'Rare': {'req': 0.6, 'reward': 0.5, 'dur': 0.8, 'rate': 65},
+                        'Epic': {'req': 0.75, 'reward': 0.7, 'dur': 0.9, 'rate': 75},
+                        'Legendary': {'req': 0.9, 'reward': 0.85, 'dur': 0.95, 'rate': 90},
+                        'Mythic': {'req': 1.0, 'reward': 1.0, 'dur': 1.0, 'rate': 99}
+                    } %}
+                    {% for rarity in rarities %}
+                    {% set scaling = rarity_scaling.get(rarity, default_scaling[rarity]) if rarity_scaling else default_scaling[rarity] %}
+                    <tr>
+                        <td><span class="rarity-badge rarity-{{ rarity }}">{{ rarity }}</span></td>
+                        <td>
+                            <input type="number" name="scaling_{{ rarity }}_req" 
+                                   step="0.01" min="0.1" max="2.0"
+                                   value="{{ scaling.requirement_multiplier if scaling.requirement_multiplier is defined else scaling.req }}">
+                        </td>
+                        <td>
+                            <input type="number" name="scaling_{{ rarity }}_reward" 
+                                   step="0.01" min="0.1" max="2.0"
+                                   value="{{ scaling.reward_multiplier if scaling.reward_multiplier is defined else scaling.reward }}">
+                        </td>
+                        <td>
+                            <input type="number" name="scaling_{{ rarity }}_dur" 
+                                   step="0.01" min="0.1" max="2.0"
+                                   value="{{ scaling.duration_multiplier if scaling.duration_multiplier is defined else scaling.dur }}">
+                        </td>
+                        <td>
+                            <input type="number" name="scaling_{{ rarity }}_rate" 
+                                   step="1" min="1" max="99"
+                                   value="{{ scaling.success_rate if scaling.success_rate is defined else scaling.rate }}">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                {% if activity %}Update Activity{% else %}Create Activity{% endif %}
+            </button>
+            <a href="/deck/{{ deck.deck_id }}/activities" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
