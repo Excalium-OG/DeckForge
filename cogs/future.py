@@ -38,49 +38,6 @@ class FutureCommands(commands.Cog):
         
         await ctx.send(embed=embed)
     
-    @commands.command(name='launch')
-    async def launch_card(self, ctx, instance_id: str):
-        """
-        [PLACEHOLDER] Launch a rocket card.
-        Usage: /launch [instance_id]
-        """
-        user_id = ctx.author.id
-        
-        try:
-            import uuid
-            card_uuid = uuid.UUID(instance_id)
-        except ValueError:
-            await ctx.send("❌ Invalid instance ID format!")
-            return
-        
-        async with self.db_pool.acquire() as conn:
-            # Verify ownership
-            card = await conn.fetchrow(
-                """SELECT uc.instance_id, uc.user_id, c.name, c.rarity, c.stats
-                   FROM user_cards uc
-                   JOIN cards c ON uc.card_id = c.card_id
-                   WHERE uc.instance_id = $1""",
-                card_uuid
-            )
-            
-            if not card:
-                await ctx.send("❌ Card not found!")
-                return
-            
-            if card['user_id'] != user_id:
-                await ctx.send("❌ You don't own this card!")
-                return
-        
-        embed = discord.Embed(
-            title="🚀 Launch Sequence Initiated!",
-            description=f"**{card['name']}** ({card['rarity']}) is preparing for launch...",
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="Status", value="Gameplay mechanics coming in Phase 2!", inline=False)
-        embed.set_footer(text="Instance: " + instance_id)
-        
-        await ctx.send(embed=embed)
-    
     @commands.command(name='balance')
     async def check_balance(self, ctx):
         """

@@ -744,6 +744,157 @@ class MissionCommands(commands.Cog):
             
             await ctx.send(embed=embed)
 
+    def is_admin(self, user_id: int) -> bool:
+        """Check if user is an admin"""
+        admin_ids = getattr(self.bot, 'admin_ids', [])
+        return user_id in admin_ids or user_id == self.bot.owner_id
+
+    @commands.command(name='sendmission')
+    async def send_mission(self, ctx):
+        """
+        [ADMIN] Manually trigger a mission spawn for testing.
+        Usage: !sendmission
+        """
+        if not self.is_admin(ctx.author.id):
+            await ctx.send("❌ This command is only available to DeckForge admins.")
+            return
+        
+        guild_id = ctx.guild.id
+        
+        async with self.db_pool.acquire() as conn:
+            settings = await conn.fetchrow(
+                """SELECT * FROM server_mission_settings WHERE guild_id = $1""",
+                guild_id
+            )
+            
+            if not settings or not settings['mission_channel_id']:
+                await ctx.send("❌ No mission channel configured for this server. Set one via the web portal.")
+                return
+            
+            if not settings['enabled']:
+                await ctx.send("❌ Missions are disabled for this server.")
+                return
+            
+            deck = await conn.fetchrow(
+                """SELECT d.deck_id FROM decks d
+                   JOIN server_decks sd ON d.deck_id = sd.deck_id
+                   WHERE sd.guild_id = $1""",
+                guild_id
+            )
+            
+            if not deck:
+                await ctx.send("❌ No deck assigned to this server.")
+                return
+            
+            templates = await conn.fetch(
+                """SELECT mt.* FROM mission_templates mt
+                   WHERE mt.deck_id = $1 AND mt.enabled = true""",
+                deck['deck_id']
+            )
+            
+            if not templates:
+                await ctx.send("❌ No enabled mission templates found for this deck.")
+                return
+            
+            template = random.choice(templates)
+            
+            scaling_rows = await conn.fetch(
+                """SELECT * FROM mission_rarity_scaling 
+                   WHERE mission_template_id = $1
+                   ORDER BY CASE rarity 
+                       WHEN 'Common' THEN 1 WHEN 'Uncommon' THEN 2
+                       WHEN 'Exceptional' THEN 3 WHEN 'Rare' THEN 4
+                       WHEN 'Epic' THEN 5 WHEN 'Legendary' THEN 6
+                       WHEN 'Mythic' THEN 7 END""",
+                template['mission_template_id']
+            )
+            
+            if not scaling_rows:
+                await ctx.send("❌ No rarity scaling configured for the selected mission template.")
+                return
+            
+            total_weight = sum(RARITY_WEIGHTS.get(r['rarity'], 0) for r in scaling_rows)
+            roll = random.uniform(0, total_weight)
+            cumulative = 0
+            chosen_rarity = None
+            scaling = None
+            
+            for row in scaling_rows:
+                cumulative += RARITY_WEIGHTS.get(row['rarity'], 0)
+                if roll <= cumulative:
+                    chosen_rarity = row['rarity']
+                    scaling = row
+                    break
+            
+            if not scaling:
+                scaling = scaling_rows[0]
+                chosen_rarity = scaling['rarity']
+            
+            requirement_rolled = random.randint(int(scaling['requirement_min']), int(scaling['requirement_max']))
+            reward_rolled = random.randint(int(scaling['reward_min']), int(scaling['reward_max']))
+            duration_rolled = random.randint(int(scaling['duration_min_hours']), int(scaling['duration_max_hours']))
+            success_roll = random.randint(1, 100)
+            
+            now = datetime.now(timezone.utc)
+            reaction_expires = now + timedelta(minutes=20)
+            
+            mission_id = await conn.fetchval(
+                """INSERT INTO active_missions 
+                   (guild_id, mission_template_id, rarity_rolled, requirement_rolled,
+                    reward_rolled, duration_rolled, success_roll, spawned_at, 
+                    reaction_expires_at, status)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+                   RETURNING active_mission_id""",
+                guild_id, template['mission_template_id'], chosen_rarity,
+                requirement_rolled, reward_rolled, duration_rolled, success_roll,
+                now, reaction_expires
+            )
+        
+        await ctx.send(f"✅ Mission spawned! Check <#{settings['mission_channel_id']}> for the mission embed.")
+        await self.spawn_mission(guild_id, mission_id)
+
+    @commands.command(name='checkchatactivity')
+    async def check_chat_activity(self, ctx):
+        """
+        [ADMIN] Check observed chat activity and mission drop chances.
+        Usage: !checkchatactivity
+        """
+        if not self.is_admin(ctx.author.id):
+            await ctx.send("❌ This command is only available to DeckForge admins.")
+            return
+        
+        guild_id = ctx.guild.id
+        
+        if guild_id not in self.activity_cache:
+            await ctx.send("📊 No chat activity recorded yet for this server.")
+            return
+        
+        cache = self.activity_cache[guild_id]
+        message_count = cache['message_count']
+        unique_users = len(cache['unique_users'])
+        
+        channels_seen = set()
+        for member_id in cache['unique_users']:
+            for channel in ctx.guild.text_channels:
+                if channel.permissions_for(ctx.guild.get_member(member_id) or ctx.author).send_messages:
+                    channels_seen.add(channel.id)
+        
+        channel_count = len(channels_seen) if channels_seen else 1
+        
+        total_weight = sum(RARITY_WEIGHTS.values())
+        rarity_chances = []
+        for rarity in RARITY_HIERARCHY:
+            chance = (RARITY_WEIGHTS[rarity] / total_weight) * 100
+            rarity_chances.append(f"{rarity} {chance:.0f}%")
+        
+        chances_str = ", ".join(rarity_chances)
+        
+        await ctx.send(
+            f"📊 **Chat Activity Stats**\n"
+            f"{message_count} messages from {unique_users} users observed.\n"
+            f"**Mission drop chance based on rarity weights:** {chances_str}"
+        )
+
 
 async def setup(bot):
     await bot.add_cog(MissionCommands(bot))
