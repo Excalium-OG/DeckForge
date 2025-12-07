@@ -788,12 +788,12 @@ class MissionCommands(commands.Cog):
             
             templates = await conn.fetch(
                 """SELECT mt.* FROM mission_templates mt
-                   WHERE mt.deck_id = $1 AND mt.enabled = true""",
+                   WHERE mt.deck_id = $1 AND mt.is_active = true""",
                 deck['deck_id']
             )
             
             if not templates:
-                await ctx.send("❌ No enabled mission templates found for this deck.")
+                await ctx.send("❌ No active mission templates found for this deck.")
                 return
             
             template = random.choice(templates)
