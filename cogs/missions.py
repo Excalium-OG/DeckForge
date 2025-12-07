@@ -478,7 +478,8 @@ class MissionCommands(commands.Cog):
                    FROM active_missions am
                    JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
                    JOIN mission_rarity_scaling mrs ON mt.mission_template_id = mrs.mission_template_id
-                   WHERE am.accepted_by = $1 AND am.guild_id = $2 AND am.status = 'pending'
+                   WHERE am.accepted_by = $1 AND am.guild_id = $2 AND am.status = 'active'
+                   AND am.started_at IS NULL
                    AND mrs.rarity = am.rarity_rolled
                    ORDER BY am.accepted_at DESC
                    LIMIT 1""",
@@ -486,7 +487,7 @@ class MissionCommands(commands.Cog):
             )
             
             if not mission:
-                await ctx.send("❌ You don't have any pending missions! Accept a mission first.")
+                await ctx.send("❌ You don't have any accepted missions waiting to start! Accept a mission first.")
                 return
             
             qualifying_card = await conn.fetchrow(
