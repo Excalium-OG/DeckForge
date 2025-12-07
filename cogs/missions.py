@@ -352,17 +352,22 @@ class MissionCommands(commands.Cog):
                 return
             
             print(f"[DEBUG] Checking for qualifying card with {mission['requirement_field']} >= {mission['requirement_rolled']}")
-            has_qualifying_card = await conn.fetchval(
-                """SELECT COUNT(*) FROM user_cards uc
-                   JOIN cards c ON uc.card_id = c.card_id
-                   JOIN card_template_fields ctf ON c.card_id = ctf.card_id
-                   JOIN card_templates ct ON ctf.template_id = ct.template_id
-                   WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
-                   AND ct.field_name = $2 AND ct.field_type = 'number'
-                   AND CAST(ctf.field_value AS FLOAT) >= $3""",
-                payload.user_id, mission['requirement_field'], mission['requirement_rolled']
-            )
-            print(f"[DEBUG] Qualifying cards count: {has_qualifying_card}")
+            try:
+                has_qualifying_card = await conn.fetchval(
+                    """SELECT COUNT(*) FROM user_cards uc
+                       JOIN cards c ON uc.card_id = c.card_id
+                       JOIN card_template_fields ctf ON c.card_id = ctf.card_id
+                       JOIN card_templates ct ON ctf.template_id = ct.template_id
+                       WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
+                       AND ct.field_name = $2 AND ct.field_type = 'number'
+                       AND ctf.field_value ~ '^[0-9.]+$'
+                       AND CAST(ctf.field_value AS FLOAT) >= $3""",
+                    payload.user_id, mission['requirement_field'], mission['requirement_rolled']
+                )
+                print(f"[DEBUG] Qualifying cards count: {has_qualifying_card}")
+            except Exception as e:
+                print(f"[DEBUG] Error checking qualifying card: {e}")
+                has_qualifying_card = 0
             
             if not has_qualifying_card:
                 print("[DEBUG] No qualifying card found")
