@@ -333,6 +333,7 @@ async def dashboard(request: Request, user = Depends(require_admin)):
         guild_ids = [int(g['id']) for g in managed_guilds]
         server_decks = {}
         adopted_deck_ids = set()
+        mission_settings = {}
         if guild_ids:
             assignments = await conn.fetch(
                 "SELECT guild_id, deck_id FROM server_decks WHERE guild_id = ANY($1)",
@@ -341,6 +342,13 @@ async def dashboard(request: Request, user = Depends(require_admin)):
             server_decks = {row['guild_id']: row['deck_id'] for row in assignments}
             # Collect deck IDs that are adopted (assigned to user's servers but not created by user)
             adopted_deck_ids = {row['deck_id'] for row in assignments if row['deck_id'] not in user_deck_ids}
+            
+            # Get mission channel settings
+            mission_rows = await conn.fetch(
+                "SELECT guild_id, mission_channel_id, missions_enabled FROM server_mission_settings WHERE guild_id = ANY($1)",
+                guild_ids
+            )
+            mission_settings = {row['guild_id']: {'channel_id': row['mission_channel_id'], 'enabled': row['missions_enabled']} for row in mission_rows}
         
         # Get adopted decks (assigned to user's servers but created by others)
         adopted_decks = []
@@ -362,11 +370,14 @@ async def dashboard(request: Request, user = Depends(require_admin)):
     guilds_with_decks = []
     for guild in managed_guilds:
         guild_id = int(guild['id'])
+        mission_info = mission_settings.get(guild_id, {})
         guilds_with_decks.append({
             'id': guild_id,
             'name': guild['name'],
             'icon': guild.get('icon'),
-            'deck_id': server_decks.get(guild_id)
+            'deck_id': server_decks.get(guild_id),
+            'mission_channel_id': mission_info.get('channel_id'),
+            'missions_enabled': mission_info.get('enabled', False)
         })
     
     return templates.TemplateResponse("dashboard.html", {
@@ -410,6 +421,71 @@ async def assign_deck_to_server(
                 "DELETE FROM server_decks WHERE guild_id = $1",
                 guild_id
             )
+    
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+@app.get("/api/server/{guild_id}/channels")
+async def get_server_channels(guild_id: int, user = Depends(require_admin)):
+    """Get text channels the bot has access to in a guild"""
+    bot_token = os.getenv('DECKFORGE_BOT_TOKEN')
+    if not bot_token:
+        raise HTTPException(status_code=500, detail="Bot token not configured")
+    
+    managed_guilds = await get_user_managed_guilds(user.get('access_token', ''))
+    guild_ids = [int(g['id']) for g in managed_guilds]
+    
+    if guild_id not in guild_ids and not is_global_admin(user['id']):
+        raise HTTPException(status_code=403, detail="You don't manage this server")
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://discord.com/api/v10/guilds/{guild_id}/channels",
+            headers={"Authorization": f"Bot {bot_token}"}
+        )
+        
+        if response.status_code != 200:
+            return {"channels": [], "error": "Could not fetch channels"}
+        
+        all_channels = response.json()
+        text_channels = [
+            {"id": str(ch['id']), "name": ch['name']}
+            for ch in all_channels
+            if ch['type'] == 0
+        ]
+        
+        text_channels.sort(key=lambda x: x['name'])
+        
+        return {"channels": text_channels}
+
+@app.post("/server/{guild_id}/set-mission-channel")
+async def set_mission_channel(
+    request: Request,
+    guild_id: int,
+    channel_id: str = Form(None),
+    user = Depends(require_admin)
+):
+    """Set the mission channel for a server"""
+    pool = await get_db_pool()
+    
+    managed_guilds = await get_user_managed_guilds(user.get('access_token', ''))
+    guild_ids_list = [int(g['id']) for g in managed_guilds]
+    
+    if guild_id not in guild_ids_list and not is_global_admin(user['id']):
+        raise HTTPException(status_code=403, detail="You don't manage this server")
+    
+    async with pool.acquire() as conn:
+        channel_id_int = int(channel_id) if channel_id else None
+        enabled = channel_id_int is not None
+        
+        await conn.execute(
+            """INSERT INTO server_mission_settings (guild_id, mission_channel_id, missions_enabled)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (guild_id) DO UPDATE SET 
+                   mission_channel_id = $2, 
+                   missions_enabled = $3,
+                   updated_at = NOW()""",
+            guild_id, channel_id_int, enabled
+        )
     
     return RedirectResponse(url="/dashboard", status_code=303)
 

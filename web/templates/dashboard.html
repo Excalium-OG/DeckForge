@@ -120,13 +120,42 @@
     gap: 0.5rem;
   }
 
-  .deck-select {
+  .deck-select, .channel-select {
     padding: 0.5rem 0.75rem;
     border: 2px solid #d1d5db;
     border-radius: 8px;
     font-size: 0.9rem;
     background-color: white;
     cursor: pointer;
+  }
+
+  .channel-select {
+    min-width: 150px;
+  }
+
+  .server-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-end;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .control-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    white-space: nowrap;
+  }
+
+  .mission-channel-assigned {
+    color: #667eea;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
   }
 
   .btn {
@@ -280,28 +309,41 @@
                         {% else %}
                         <p class="no-deck">No deck assigned</p>
                         {% endif %}
+                        {% if guild.mission_channel_id %}
+                        <p class="mission-channel-assigned">Mission channel configured</p>
+                        {% endif %}
                     </div>
                 </div>
-                <form method="POST" action="/server/{{ guild.id }}/assign-deck" class="assign-form">
-                    <select name="deck_id" class="deck-select">
-                        <option value="">No Deck</option>
-                        {% for deck in decks %}
-                        <option value="{{ deck.deck_id }}" {% if guild.deck_id == deck.deck_id %}selected{% endif %}>
-                            {{ deck.name }}
-                        </option>
-                        {% endfor %}
-                        {% if adopted_decks %}
-                        <optgroup label="Adopted Decks">
-                            {% for deck in adopted_decks %}
+                <div class="server-controls">
+                    <form method="POST" action="/server/{{ guild.id }}/assign-deck" class="control-row">
+                        <span class="control-label">Deck:</span>
+                        <select name="deck_id" class="deck-select">
+                            <option value="">No Deck</option>
+                            {% for deck in decks %}
                             <option value="{{ deck.deck_id }}" {% if guild.deck_id == deck.deck_id %}selected{% endif %}>
-                                {{ deck.name }} (adopted)
+                                {{ deck.name }}
                             </option>
                             {% endfor %}
-                        </optgroup>
-                        {% endif %}
-                    </select>
-                    <button type="submit" class="btn btn-sm btn-primary">Assign</button>
-                </form>
+                            {% if adopted_decks %}
+                            <optgroup label="Adopted Decks">
+                                {% for deck in adopted_decks %}
+                                <option value="{{ deck.deck_id }}" {% if guild.deck_id == deck.deck_id %}selected{% endif %}>
+                                    {{ deck.name }} (adopted)
+                                </option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endif %}
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-primary">Assign</button>
+                    </form>
+                    <form method="POST" action="/server/{{ guild.id }}/set-mission-channel" class="control-row" id="mission-form-{{ guild.id }}">
+                        <span class="control-label">Mission Channel:</span>
+                        <select name="channel_id" class="channel-select" id="channel-select-{{ guild.id }}" data-guild-id="{{ guild.id }}" data-current="{{ guild.mission_channel_id or '' }}">
+                            <option value="">Select channel...</option>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-secondary">Set</button>
+                    </form>
+                </div>
             </div>
             {% endfor %}
         </div>
@@ -310,4 +352,39 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const channelSelects = document.querySelectorAll('.channel-select');
+    
+    channelSelects.forEach(async function(select) {
+        const guildId = select.dataset.guildId;
+        const currentChannelId = select.dataset.current;
+        
+        try {
+            const response = await fetch(`/api/server/${guildId}/channels`);
+            const data = await response.json();
+            
+            if (data.channels && data.channels.length > 0) {
+                select.innerHTML = '<option value="">No mission channel</option>';
+                
+                data.channels.forEach(function(channel) {
+                    const option = document.createElement('option');
+                    option.value = channel.id;
+                    option.textContent = '#' + channel.name;
+                    if (currentChannelId && channel.id === currentChannelId) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            } else {
+                select.innerHTML = '<option value="">No channels available</option>';
+            }
+        } catch (error) {
+            console.error('Error loading channels for guild', guildId, error);
+            select.innerHTML = '<option value="">Error loading channels</option>';
+        }
+    });
+});
+</script>
 {% endblock %}

@@ -771,7 +771,7 @@ class MissionCommands(commands.Cog):
                 await ctx.send("❌ No mission channel configured for this server. Set one via the web portal.")
                 return
             
-            if not settings['enabled']:
+            if not settings['missions_enabled']:
                 await ctx.send("❌ Missions are disabled for this server.")
                 return
             
