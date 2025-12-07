@@ -858,9 +858,62 @@ class MissionCommands(commands.Cog):
                 requirement_rolled, reward_rolled, duration_rolled, success_roll,
                 now, reaction_expires
             )
+            
+            channel = self.bot.get_channel(settings['mission_channel_id'])
+            if not channel:
+                await ctx.send("❌ Could not find the mission channel.")
+                return
+            
+            acceptance_cost = int(reward_rolled * 0.05)
+            
+            success_rates = " | ".join([f"{r['rarity'][:3]} {int(r['success_rate'])}%" for r in scaling_rows])
+            
+            embed = discord.Embed(
+                title=f"🚀 Mission: {template['name']} [{chosen_rarity.upper()}]",
+                description=template['description'] or "Complete this mission to earn credits!",
+                color=RARITY_COLORS.get(chosen_rarity, 0x667EEA)
+            )
+            
+            embed.add_field(
+                name="📋 Requirement",
+                value=f"**{template['requirement_field']}** >= {requirement_rolled:,}",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="💰 Reward",
+                value=f"**{reward_rolled:,}** credits\n(Cost: {acceptance_cost} cr)",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="⏱️ Duration",
+                value=f"**{duration_rolled}** hours",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📊 Success Rates by Card Rarity",
+                value=success_rates,
+                inline=False
+            )
+            
+            embed.set_footer(text=f"React with ✅ within 20 minutes to accept! | Mission #{mission_id}")
+            embed.timestamp = now
+            
+            try:
+                message = await channel.send(embed=embed)
+                await message.add_reaction("✅")
+                
+                await conn.execute(
+                    "UPDATE active_missions SET message_id = $1, channel_id = $2 WHERE active_mission_id = $3",
+                    message.id, channel.id, mission_id
+                )
+            except Exception as e:
+                await ctx.send(f"❌ Failed to post mission embed: {e}")
+                return
         
         await ctx.send(f"✅ Mission spawned! Check <#{settings['mission_channel_id']}> for the mission embed.")
-        await self.spawn_mission(guild_id, mission_id)
 
     @commands.command(name='checkchatactivity')
     async def check_chat_activity(self, ctx):
