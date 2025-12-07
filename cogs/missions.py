@@ -299,22 +299,30 @@ class MissionCommands(commands.Cog):
                 return
             
             now = datetime.now(timezone.utc)
+            print(f"[DEBUG] Checking expiration: now={now}, expires={mission['reaction_expires_at']}")
             if mission['reaction_expires_at'] and now > mission['reaction_expires_at']:
+                print("[DEBUG] Mission reaction window expired")
                 return
             
+            print(f"[DEBUG] Checking if already accepted: accepted_by={mission['accepted_by']}")
             if mission['accepted_by']:
+                print("[DEBUG] Mission already accepted by someone else")
                 return
             
+            print(f"[DEBUG] Checking cooldown for user {payload.user_id}")
             cooldown = await conn.fetchrow(
                 """SELECT last_accept_time FROM user_mission_cooldowns 
                    WHERE user_id = $1 AND guild_id = $2""",
                 payload.user_id, payload.guild_id
             )
+            print(f"[DEBUG] Cooldown result: {cooldown}")
             
             if cooldown:
                 time_since = (now - cooldown['last_accept_time']).total_seconds()
+                print(f"[DEBUG] Time since last accept: {time_since} seconds")
                 if time_since < 14400:
                     remaining = int((14400 - time_since) / 60)
+                    print(f"[DEBUG] User on cooldown, {remaining} minutes remaining")
                     try:
                         user = self.bot.get_user(payload.user_id)
                         if user:
@@ -323,14 +331,18 @@ class MissionCommands(commands.Cog):
                         pass
                     return
             
+            print(f"[DEBUG] Checking player credits for user {payload.user_id}")
             player = await conn.fetchrow(
                 "SELECT credits FROM players WHERE user_id = $1",
                 payload.user_id
             )
+            print(f"[DEBUG] Player result: {player}")
             
             acceptance_cost = int(mission['reward_rolled'] * 0.05)
+            print(f"[DEBUG] Acceptance cost: {acceptance_cost}")
             
             if not player or player['credits'] < acceptance_cost:
+                print(f"[DEBUG] Insufficient credits: has {player['credits'] if player else 0}, needs {acceptance_cost}")
                 try:
                     user = self.bot.get_user(payload.user_id)
                     if user:
@@ -339,6 +351,7 @@ class MissionCommands(commands.Cog):
                     pass
                 return
             
+            print(f"[DEBUG] Checking for qualifying card with {mission['requirement_field']} >= {mission['requirement_rolled']}")
             has_qualifying_card = await conn.fetchval(
                 """SELECT COUNT(*) FROM user_cards uc
                    JOIN cards c ON uc.card_id = c.card_id
@@ -349,8 +362,10 @@ class MissionCommands(commands.Cog):
                    AND CAST(ctf.field_value AS FLOAT) >= $3""",
                 payload.user_id, mission['requirement_field'], mission['requirement_rolled']
             )
+            print(f"[DEBUG] Qualifying cards count: {has_qualifying_card}")
             
             if not has_qualifying_card:
+                print("[DEBUG] No qualifying card found")
                 try:
                     user = self.bot.get_user(payload.user_id)
                     if user:
@@ -358,6 +373,8 @@ class MissionCommands(commands.Cog):
                 except:
                     pass
                 return
+            
+            print("[DEBUG] All checks passed, proceeding with mission acceptance")
             
             mission_expires = now + timedelta(days=1)
             
