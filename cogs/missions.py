@@ -830,9 +830,18 @@ class MissionCommands(commands.Cog):
                 scaling = scaling_rows[0]
                 chosen_rarity = scaling['rarity']
             
-            requirement_rolled = random.randint(int(scaling['requirement_min']), int(scaling['requirement_max']))
-            reward_rolled = random.randint(int(scaling['reward_min']), int(scaling['reward_max']))
-            duration_rolled = random.randint(int(scaling['duration_min_hours']), int(scaling['duration_max_hours']))
+            base_req = template['min_value_base']
+            base_reward = template['reward_base']
+            base_duration = template['duration_base_hours']
+            variance = template['variance_pct'] / 100.0
+            
+            req_mult = scaling['requirement_multiplier']
+            reward_mult = scaling['reward_multiplier']
+            duration_mult = scaling['duration_multiplier']
+            
+            requirement_rolled = int(base_req * req_mult * random.uniform(1 - variance, 1 + variance))
+            reward_rolled = int(base_reward * reward_mult * random.uniform(1 - variance, 1 + variance))
+            duration_rolled = max(1, int(base_duration * duration_mult))
             success_roll = random.randint(1, 100)
             
             now = datetime.now(timezone.utc)
@@ -840,12 +849,12 @@ class MissionCommands(commands.Cog):
             
             mission_id = await conn.fetchval(
                 """INSERT INTO active_missions 
-                   (guild_id, mission_template_id, rarity_rolled, requirement_rolled,
-                    reward_rolled, duration_rolled, success_roll, spawned_at, 
+                   (guild_id, mission_template_id, deck_id, rarity_rolled, requirement_rolled,
+                    reward_rolled, duration_rolled_hours, success_roll, spawned_at, 
                     reaction_expires_at, status)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
                    RETURNING active_mission_id""",
-                guild_id, template['mission_template_id'], chosen_rarity,
+                guild_id, template['mission_template_id'], deck['deck_id'], chosen_rarity,
                 requirement_rolled, reward_rolled, duration_rolled, success_roll,
                 now, reaction_expires
             )
