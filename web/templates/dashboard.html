@@ -354,12 +354,14 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     const channelSelects = document.querySelectorAll('.channel-select');
     
-    channelSelects.forEach(async function(select) {
+    for (const select of channelSelects) {
         const guildId = select.dataset.guildId;
         const currentChannelId = select.dataset.current;
+        
+        select.innerHTML = '<option value="">Loading channels...</option>';
         
         try {
             const response = await fetch(`/api/server/${guildId}/channels`);
@@ -377,6 +379,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     select.appendChild(option);
                 });
+            } else if (data.error) {
+                select.innerHTML = '<option value="">' + data.error + '</option>';
             } else {
                 select.innerHTML = '<option value="">No channels available</option>';
             }
@@ -384,7 +388,9 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error loading channels for guild', guildId, error);
             select.innerHTML = '<option value="">Error loading channels</option>';
         }
-    });
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
 });
 </script>
 {% endblock %}
