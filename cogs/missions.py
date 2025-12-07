@@ -500,6 +500,7 @@ class MissionCommands(commands.Cog):
                    WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
                    AND LOWER(c.name) = LOWER($2)
                    AND ct.field_name = $3 AND ct.field_type = 'number'
+                   AND ctf.field_value ~ '^[0-9.]+$'
                    AND CAST(ctf.field_value AS FLOAT) >= $4
                    ORDER BY uc.merge_level DESC
                    LIMIT 1""",
