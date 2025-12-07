@@ -271,11 +271,17 @@ class MissionCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         """Handle mission acceptance via reactions"""
+        print(f"[DEBUG] Reaction received: emoji={payload.emoji}, user={payload.user_id}, message={payload.message_id}")
+        
         if payload.user_id == self.bot.user.id:
+            print("[DEBUG] Ignoring bot's own reaction")
             return
         
         if str(payload.emoji) != "✅":
+            print(f"[DEBUG] Ignoring non-checkmark emoji: {payload.emoji}")
             return
+        
+        print(f"[DEBUG] Processing checkmark reaction on message {payload.message_id}")
         
         async with self.db_pool.acquire() as conn:
             mission = await conn.fetchrow(
@@ -286,7 +292,10 @@ class MissionCommands(commands.Cog):
                 payload.message_id
             )
             
+            print(f"[DEBUG] Mission lookup result: {mission}")
+            
             if not mission:
+                print(f"[DEBUG] No pending mission found for message {payload.message_id}")
                 return
             
             now = datetime.now(timezone.utc)
