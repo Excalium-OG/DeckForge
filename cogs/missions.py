@@ -395,7 +395,7 @@ class MissionCommands(commands.Cog):
                     print("[DEBUG] Updating active_missions...")
                     await conn.execute(
                         """UPDATE active_missions 
-                           SET accepted_by = $1, accepted_at = $2, status = 'accepted',
+                           SET accepted_by = $1, accepted_at = $2, status = 'active',
                                mission_expires_at = $3
                            WHERE active_mission_id = $4""",
                         payload.user_id, now, mission_expires, mission['active_mission_id']
@@ -405,7 +405,7 @@ class MissionCommands(commands.Cog):
                     await conn.execute(
                         """INSERT INTO user_missions 
                            (user_id, guild_id, active_mission_id, status, acceptance_cost, accepted_at)
-                           VALUES ($1, $2, $3, 'accepted', $4, $5)""",
+                           VALUES ($1, $2, $3, 'active', $4, $5)""",
                         payload.user_id, payload.guild_id, mission['active_mission_id'], 
                         acceptance_cost, now
                     )
