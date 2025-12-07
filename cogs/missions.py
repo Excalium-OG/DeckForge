@@ -544,7 +544,7 @@ class MissionCommands(commands.Cog):
                 
                 await conn.execute(
                     """UPDATE user_missions 
-                       SET status = 'accepted', started_at = $1, card_instance_id = $2
+                       SET status = 'active', started_at = $1, card_instance_id = $2
                        WHERE active_mission_id = $3 AND user_id = $4""",
                     now, qualifying_card['instance_id'], mission['active_mission_id'], user_id
                 )
@@ -589,7 +589,7 @@ class MissionCommands(commands.Cog):
                 """SELECT am.*, mt.requirement_field
                    FROM active_missions am
                    JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
-                   WHERE am.accepted_by = $1 AND am.status = 'pending'
+                   WHERE am.accepted_by = $1 AND am.status = 'active' AND am.started_at IS NULL
                    ORDER BY am.accepted_at DESC
                    LIMIT 1""",
                 user_id
@@ -606,6 +606,7 @@ class MissionCommands(commands.Cog):
                    JOIN card_templates ct ON ctf.template_id = ct.template_id
                    WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
                    AND ct.field_name = $2 AND ct.field_type = 'number'
+                   AND ctf.field_value ~ '^[0-9.]+$'
                    AND CAST(ctf.field_value AS FLOAT) >= $3
                    AND LOWER(c.name) LIKE LOWER($4)
                    ORDER BY uc.merge_level DESC, c.name
