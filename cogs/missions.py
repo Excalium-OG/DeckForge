@@ -383,41 +383,55 @@ class MissionCommands(commands.Cog):
             
             mission_expires = now + timedelta(days=1)
             
-            async with conn.transaction():
-                await conn.execute(
-                    "UPDATE players SET credits = credits - $1 WHERE user_id = $2",
-                    acceptance_cost, payload.user_id
-                )
-                
-                await conn.execute(
-                    """UPDATE active_missions 
-                       SET accepted_by = $1, accepted_at = $2, status = 'pending',
-                           mission_expires_at = $3
-                       WHERE active_mission_id = $4""",
-                    payload.user_id, now, mission_expires, mission['active_mission_id']
-                )
-                
-                await conn.execute(
-                    """INSERT INTO user_missions 
-                       (user_id, guild_id, active_mission_id, status, acceptance_cost, accepted_at)
-                       VALUES ($1, $2, $3, 'accepted', $4, $5)""",
-                    payload.user_id, payload.guild_id, mission['active_mission_id'], 
-                    acceptance_cost, now
-                )
-                
-                await conn.execute(
-                    """INSERT INTO user_mission_cooldowns (user_id, guild_id, last_accept_time)
-                       VALUES ($1, $2, $3)
-                       ON CONFLICT (user_id, guild_id) 
-                       DO UPDATE SET last_accept_time = $3""",
-                    payload.user_id, payload.guild_id, now
-                )
+            try:
+                print("[DEBUG] Starting transaction...")
+                async with conn.transaction():
+                    print("[DEBUG] Deducting credits...")
+                    await conn.execute(
+                        "UPDATE players SET credits = credits - $1 WHERE user_id = $2",
+                        acceptance_cost, payload.user_id
+                    )
+                    
+                    print("[DEBUG] Updating active_missions...")
+                    await conn.execute(
+                        """UPDATE active_missions 
+                           SET accepted_by = $1, accepted_at = $2, status = 'accepted',
+                               mission_expires_at = $3
+                           WHERE active_mission_id = $4""",
+                        payload.user_id, now, mission_expires, mission['active_mission_id']
+                    )
+                    
+                    print("[DEBUG] Inserting user_missions...")
+                    await conn.execute(
+                        """INSERT INTO user_missions 
+                           (user_id, guild_id, active_mission_id, status, acceptance_cost, accepted_at)
+                           VALUES ($1, $2, $3, 'accepted', $4, $5)""",
+                        payload.user_id, payload.guild_id, mission['active_mission_id'], 
+                        acceptance_cost, now
+                    )
+                    
+                    print("[DEBUG] Updating cooldown...")
+                    await conn.execute(
+                        """INSERT INTO user_mission_cooldowns (user_id, guild_id, last_accept_time)
+                           VALUES ($1, $2, $3)
+                           ON CONFLICT (user_id, guild_id) 
+                           DO UPDATE SET last_accept_time = $3""",
+                        payload.user_id, payload.guild_id, now
+                    )
+                print("[DEBUG] Transaction committed successfully!")
+            except Exception as e:
+                print(f"[DEBUG] Transaction error: {e}")
+                import traceback
+                traceback.print_exc()
+                return
             
             try:
                 channel = self.bot.get_channel(payload.channel_id)
+                print(f"[DEBUG] Got channel: {channel}")
                 if channel:
                     message = await channel.fetch_message(payload.message_id)
                     user = self.bot.get_user(payload.user_id)
+                    print(f"[DEBUG] Got message and user: {user}")
                     
                     embed = message.embeds[0] if message.embeds else None
                     if embed:
@@ -425,8 +439,11 @@ class MissionCommands(commands.Cog):
                         embed.set_footer(text=f"✅ Accepted by {user.display_name if user else 'Unknown'} | Use /startmission to begin!")
                         await message.edit(embed=embed)
                         await message.clear_reactions()
+                        print("[DEBUG] Updated embed successfully!")
             except Exception as e:
-                print(f"Error updating mission message: {e}")
+                print(f"[DEBUG] Error updating mission message: {e}")
+                import traceback
+                traceback.print_exc()
             
             try:
                 user = self.bot.get_user(payload.user_id)
