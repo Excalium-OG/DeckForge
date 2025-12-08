@@ -1115,6 +1115,101 @@ class MissionCommands(commands.Cog):
             f"**Mission drop chance based on rarity weights:** {chances_str}"
         )
 
+    @commands.command(name='mresetcd')
+    async def reset_mission_cooldown(self, ctx, user: discord.Member):
+        """
+        [ADMIN] Reset mission cooldown for a user in this server.
+        Usage: !mresetcd @user
+        """
+        if not self.is_admin(ctx.author.id):
+            await ctx.send("❌ This command is only available to DeckForge admins.")
+            return
+        
+        guild_id = ctx.guild.id
+        
+        async with self.db_pool.acquire() as conn:
+            result = await conn.execute(
+                """DELETE FROM user_mission_cooldowns 
+                   WHERE user_id = $1 AND guild_id = $2""",
+                user.id, guild_id
+            )
+            
+            if result == "DELETE 0":
+                await ctx.send(f"ℹ️ {user.display_name} has no mission cooldown in this server.")
+            else:
+                await ctx.send(f"✅ Reset mission cooldown for {user.display_name} in this server.")
+
+    @commands.command(name='mcomplete')
+    async def complete_mission(self, ctx, user: discord.Member):
+        """
+        [ADMIN] Complete a user's started mission in this server.
+        If multiple started missions exist, completes the one with longest remaining duration.
+        Usage: !mcomplete @user
+        """
+        if not self.is_admin(ctx.author.id):
+            await ctx.send("❌ This command is only available to DeckForge admins.")
+            return
+        
+        guild_id = ctx.guild.id
+        now = datetime.now(timezone.utc)
+        
+        async with self.db_pool.acquire() as conn:
+            mission = await conn.fetchrow(
+                """SELECT am.*, mt.name as template_name
+                   FROM active_missions am
+                   JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
+                   WHERE am.accepted_by = $1 AND am.guild_id = $2 
+                   AND am.status = 'active' AND am.started_at IS NOT NULL
+                   ORDER BY am.mission_expires_at DESC
+                   LIMIT 1""",
+                user.id, guild_id
+            )
+            
+            if not mission:
+                await ctx.send(f"❌ {user.display_name} has no started missions in this server.")
+                return
+            
+            base_reward = mission['reward_rolled']
+            card_instance_id = mission['card_instance_id']
+            
+            merge_level = 0
+            if card_instance_id:
+                card_info = await conn.fetchrow(
+                    "SELECT merge_level FROM user_cards WHERE instance_id = $1",
+                    card_instance_id
+                )
+                if card_info:
+                    merge_level = card_info['merge_level']
+            
+            merge_bonus = int(base_reward * (merge_level * 0.05))
+            final_reward = base_reward + merge_bonus
+            
+            async with conn.transaction():
+                await conn.execute(
+                    """UPDATE active_missions 
+                       SET status = 'completed', completed_at = $1
+                       WHERE active_mission_id = $2""",
+                    now, mission['active_mission_id']
+                )
+                
+                await conn.execute(
+                    """UPDATE user_missions 
+                       SET status = 'completed', completed_at = $1, credits_earned = $2
+                       WHERE active_mission_id = $3 AND user_id = $4""",
+                    now, final_reward, mission['active_mission_id'], user.id
+                )
+                
+                await conn.execute(
+                    "UPDATE players SET credits = credits + $1 WHERE user_id = $2",
+                    final_reward, user.id
+                )
+            
+            await ctx.send(
+                f"✅ Completed mission **{mission['template_name']}** [{mission['rarity_rolled']}] for {user.display_name}.\n"
+                f"💰 Awarded **{final_reward:,}** credits" + 
+                (f" (+{merge_bonus:,} merge bonus)" if merge_bonus > 0 else "")
+            )
+
 
 async def setup(bot):
     await bot.add_cog(MissionCommands(bot))
