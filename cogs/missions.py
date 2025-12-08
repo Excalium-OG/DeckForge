@@ -531,8 +531,11 @@ class MissionCommands(commands.Cog):
                 print(f"[DEBUG] Error sending acceptance DM: {e}")
 
     @commands.hybrid_command(name='startmission', description="Start an accepted mission with a qualifying card")
-    @app_commands.describe(card_name="The card to use for the mission")
-    async def start_mission(self, ctx, *, card_name: str):
+    @app_commands.describe(
+        mission_name="The mission to start",
+        card_name="The card to use for the mission"
+    )
+    async def start_mission(self, ctx, mission_name: str, card_name: str):
         """Start an accepted mission using a qualifying card"""
         if ctx.interaction:
             await ctx.defer()
@@ -554,20 +557,41 @@ class MissionCommands(commands.Cog):
             except ValueError:
                 pass
         
+        target_mission_id = None
+        if '|' in mission_name:
+            parts = mission_name.rsplit('|', 1)
+            try:
+                target_mission_id = int(parts[1])
+            except ValueError:
+                pass
+        
         async with self.db_pool.acquire() as conn:
-            mission = await conn.fetchrow(
-                """SELECT am.*, mt.name as template_name, mt.requirement_field,
-                          mrs.success_rate
-                   FROM active_missions am
-                   JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
-                   JOIN mission_rarity_scaling mrs ON mt.mission_template_id = mrs.mission_template_id
-                   WHERE am.accepted_by = $1 AND am.guild_id = $2 AND am.status = 'active'
-                   AND am.started_at IS NULL
-                   AND mrs.rarity = am.rarity_rolled
-                   ORDER BY am.accepted_at DESC
-                   LIMIT 1""",
-                user_id, guild_id
-            )
+            if target_mission_id:
+                mission = await conn.fetchrow(
+                    """SELECT am.*, mt.name as template_name, mt.requirement_field,
+                              mrs.success_rate
+                       FROM active_missions am
+                       JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
+                       JOIN mission_rarity_scaling mrs ON mt.mission_template_id = mrs.mission_template_id
+                       WHERE am.active_mission_id = $1 AND am.accepted_by = $2 AND am.guild_id = $3 
+                       AND am.status = 'active' AND am.started_at IS NULL
+                       AND mrs.rarity = am.rarity_rolled""",
+                    target_mission_id, user_id, guild_id
+                )
+            else:
+                mission = await conn.fetchrow(
+                    """SELECT am.*, mt.name as template_name, mt.requirement_field,
+                              mrs.success_rate
+                       FROM active_missions am
+                       JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
+                       JOIN mission_rarity_scaling mrs ON mt.mission_template_id = mrs.mission_template_id
+                       WHERE am.accepted_by = $1 AND am.guild_id = $2 AND am.status = 'active'
+                       AND am.started_at IS NULL
+                       AND mrs.rarity = am.rarity_rolled
+                       ORDER BY am.accepted_at DESC
+                       LIMIT 1""",
+                    user_id, guild_id
+                )
             
             if not mission:
                 await ctx.send("❌ You don't have any accepted missions waiting to start! Accept a mission first.")
@@ -680,21 +704,70 @@ class MissionCommands(commands.Cog):
             
             await ctx.send(embed=embed)
 
-    @start_mission.autocomplete('card_name')
-    async def start_mission_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-        """Autocomplete for card selection"""
+    @start_mission.autocomplete('mission_name')
+    async def start_mission_mission_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        """Autocomplete for mission selection"""
         user_id = interaction.user.id
+        guild_id = interaction.guild_id
         
         async with self.db_pool.acquire() as conn:
-            mission = await conn.fetchrow(
-                """SELECT am.*, mt.requirement_field
+            missions = await conn.fetch(
+                """SELECT am.active_mission_id, am.rarity_rolled, am.reward_rolled, 
+                          mt.name as template_name
                    FROM active_missions am
                    JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
-                   WHERE am.accepted_by = $1 AND am.status = 'active' AND am.started_at IS NULL
+                   WHERE am.accepted_by = $1 AND am.guild_id = $2 
+                   AND am.status = 'active' AND am.started_at IS NULL
                    ORDER BY am.accepted_at DESC
-                   LIMIT 1""",
-                user_id
+                   LIMIT 25""",
+                user_id, guild_id
             )
+            
+            choices = []
+            for m in missions:
+                display = f"{m['template_name']} [{m['rarity_rolled']}] ({m['reward_rolled']:,} cr)"
+                if current.lower() in display.lower():
+                    value = f"{m['template_name']}|{m['active_mission_id']}"
+                    choices.append(app_commands.Choice(name=display[:100], value=value))
+            
+            return choices
+
+    @start_mission.autocomplete('card_name')
+    async def start_mission_card_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        """Autocomplete for card selection based on selected mission"""
+        user_id = interaction.user.id
+        guild_id = interaction.guild_id
+        
+        selected_mission = interaction.namespace.mission_name
+        target_mission_id = None
+        if selected_mission and '|' in selected_mission:
+            parts = selected_mission.rsplit('|', 1)
+            try:
+                target_mission_id = int(parts[1])
+            except ValueError:
+                pass
+        
+        async with self.db_pool.acquire() as conn:
+            if target_mission_id:
+                mission = await conn.fetchrow(
+                    """SELECT am.*, mt.requirement_field
+                       FROM active_missions am
+                       JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
+                       WHERE am.active_mission_id = $1 AND am.accepted_by = $2 
+                       AND am.status = 'active' AND am.started_at IS NULL""",
+                    target_mission_id, user_id
+                )
+            else:
+                mission = await conn.fetchrow(
+                    """SELECT am.*, mt.requirement_field
+                       FROM active_missions am
+                       JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
+                       WHERE am.accepted_by = $1 AND am.guild_id = $2 
+                       AND am.status = 'active' AND am.started_at IS NULL
+                       ORDER BY am.accepted_at DESC
+                       LIMIT 1""",
+                    user_id, guild_id
+                )
             
             if not mission:
                 return []
