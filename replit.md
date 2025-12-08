@@ -55,6 +55,11 @@ Preferred communication style: Simple, everyday language.
   - **Success Mechanics**: Base success rate varies by rarity, +5% per merge level (max +99%). Success determined when mission duration expires
   - **Credit Rewards**: Successful missions award rolled credits plus 5% per merge level bonus; failed missions forfeit acceptance cost
   - **Mission Commands**: `/startmission` (with autocomplete for qualifying cards) to begin, `/mymissions` to view active missions
+  - **User Feedback System**: Enhanced DM notifications for mission events:
+    - **Acceptance Success**: DM includes acceptance cost, 4-hour cooldown timer with Discord timestamp, and next steps
+    - **Acceptance Failure**: DM explains failure reason (insufficient credits, no qualifying card, or cooldown); user's reaction is removed
+    - **Mission Completion**: DM with format "Your mission, [Name] [Rarity], has completed in [Server]. It was successful/a failure." with credit earnings
+    - **Cooldown Expiration**: Automatic DM when 4-hour cooldown expires: "Your mission cooldown is ready in [Server], you can accept a new mission!"
 
 ### Web Admin Portal Features
 - **Dashboard**: Displays user info, managed Discord servers, assigned decks (showing both created and adopted decks), and deck assignment controls.

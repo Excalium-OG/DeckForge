@@ -36,10 +36,12 @@ class MissionCommands(commands.Cog):
         self.activity_cache: Dict[int, Dict] = {}
         self.mission_check_loop.start()
         self.mission_lifecycle_loop.start()
+        self.cooldown_notification_loop.start()
 
     def cog_unload(self):
         self.mission_check_loop.cancel()
         self.mission_lifecycle_loop.cancel()
+        self.cooldown_notification_loop.cancel()
 
     @tasks.loop(minutes=10)
     async def mission_check_loop(self):
@@ -64,6 +66,52 @@ class MissionCommands(commands.Cog):
     @mission_lifecycle_loop.before_loop
     async def before_lifecycle_check(self):
         await self.bot.wait_until_ready()
+
+    @tasks.loop(minutes=5)
+    async def cooldown_notification_loop(self):
+        """Check for expired cooldowns and notify users"""
+        try:
+            await self.process_cooldown_notifications()
+        except Exception as e:
+            print(f"Cooldown notification loop error: {e}")
+
+    @cooldown_notification_loop.before_loop
+    async def before_cooldown_notification(self):
+        await self.bot.wait_until_ready()
+
+    async def process_cooldown_notifications(self):
+        """Send DMs to users whose cooldowns have expired"""
+        now = datetime.now(timezone.utc)
+        cooldown_threshold = now - timedelta(hours=4)
+        
+        async with self.db_pool.acquire() as conn:
+            expired_cooldowns = await conn.fetch(
+                """SELECT user_id, guild_id, last_accept_time 
+                   FROM user_mission_cooldowns
+                   WHERE last_accept_time <= $1 
+                   AND (cooldown_notified IS NULL OR cooldown_notified = FALSE)""",
+                cooldown_threshold
+            )
+            
+            for cooldown in expired_cooldowns:
+                try:
+                    user = self.bot.get_user(cooldown['user_id'])
+                    guild = self.bot.get_guild(cooldown['guild_id'])
+                    guild_name = guild.name if guild else "Unknown Server"
+                    
+                    if user:
+                        await user.send(
+                            f"🔔 Your mission cooldown is ready in **{guild_name}**, you can accept a new mission!"
+                        )
+                    
+                    await conn.execute(
+                        """UPDATE user_mission_cooldowns 
+                           SET cooldown_notified = TRUE
+                           WHERE user_id = $1 AND guild_id = $2""",
+                        cooldown['user_id'], cooldown['guild_id']
+                    )
+                except Exception as e:
+                    print(f"Error notifying user {cooldown['user_id']} about cooldown: {e}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -327,6 +375,10 @@ class MissionCommands(commands.Cog):
                         user = self.bot.get_user(payload.user_id)
                         if user:
                             await user.send(f"❌ You're on cooldown! Wait {remaining} more minutes before accepting another mission.")
+                        channel = self.bot.get_channel(payload.channel_id)
+                        if channel:
+                            message = await channel.fetch_message(payload.message_id)
+                            await message.remove_reaction("✅", discord.Object(id=payload.user_id))
                     except:
                         pass
                     return
@@ -346,7 +398,15 @@ class MissionCommands(commands.Cog):
                 try:
                     user = self.bot.get_user(payload.user_id)
                     if user:
-                        await user.send(f"❌ You need {acceptance_cost} credits to accept this mission!")
+                        current_credits = player['credits'] if player else 0
+                        await user.send(
+                            f"❌ **Unable to Accept Mission**\n"
+                            f"You need **{acceptance_cost}** credits to accept this mission, but you only have **{current_credits}** credits."
+                        )
+                    channel = self.bot.get_channel(payload.channel_id)
+                    if channel:
+                        message = await channel.fetch_message(payload.message_id)
+                        await message.remove_reaction("✅", discord.Object(id=payload.user_id))
                 except:
                     pass
                 return
@@ -374,7 +434,15 @@ class MissionCommands(commands.Cog):
                 try:
                     user = self.bot.get_user(payload.user_id)
                     if user:
-                        await user.send(f"❌ You don't have a card with {mission['requirement_field']} >= {mission['requirement_rolled']:,.0f}!")
+                        await user.send(
+                            f"❌ **Unable to Accept Mission**\n"
+                            f"You don't have a card with **{mission['requirement_field']}** >= **{mission['requirement_rolled']:,.0f}**.\n"
+                            f"Collect or merge cards to meet this requirement!"
+                        )
+                    channel = self.bot.get_channel(payload.channel_id)
+                    if channel:
+                        message = await channel.fetch_message(payload.message_id)
+                        await message.remove_reaction("✅", discord.Object(id=payload.user_id))
                 except:
                     pass
                 return
@@ -412,10 +480,10 @@ class MissionCommands(commands.Cog):
                     
                     print("[DEBUG] Updating cooldown...")
                     await conn.execute(
-                        """INSERT INTO user_mission_cooldowns (user_id, guild_id, last_accept_time)
-                           VALUES ($1, $2, $3)
+                        """INSERT INTO user_mission_cooldowns (user_id, guild_id, last_accept_time, cooldown_notified)
+                           VALUES ($1, $2, $3, FALSE)
                            ON CONFLICT (user_id, guild_id) 
-                           DO UPDATE SET last_accept_time = $3""",
+                           DO UPDATE SET last_accept_time = $3, cooldown_notified = FALSE""",
                         payload.user_id, payload.guild_id, now
                     )
                 print("[DEBUG] Transaction committed successfully!")
@@ -447,12 +515,17 @@ class MissionCommands(commands.Cog):
             
             try:
                 user = self.bot.get_user(payload.user_id)
+                guild = self.bot.get_guild(payload.guild_id)
+                guild_name = guild.name if guild else "Unknown Server"
+                cooldown_ready = now + timedelta(hours=4)
+                
                 if user:
                     await user.send(
-                        f"✅ **Mission Accepted!** {mission['template_name']} [{mission['rarity_rolled']}]\n"
-                        f"💰 Cost: {acceptance_cost} credits deducted\n"
-                        f"📋 Use `/startmission` within 24 hours to begin the mission!\n"
-                        f"⏱️ Mission duration: {mission['duration_rolled_hours']} hours"
+                        f"✅ **Mission Accepted!** {mission['template_name']} [{mission['rarity_rolled']}]\n\n"
+                        f"💰 **Cost:** {acceptance_cost} credits deducted\n"
+                        f"📋 **Next Step:** Use `/startmission` within 24 hours to begin!\n"
+                        f"⏱️ **Mission Duration:** {mission['duration_rolled_hours']} hours\n\n"
+                        f"🔄 **Cooldown:** You can accept another mission in **{guild_name}** <t:{int(cooldown_ready.timestamp())}:R>"
                     )
             except:
                 pass
@@ -706,11 +779,14 @@ class MissionCommands(commands.Cog):
                         
                         try:
                             user = self.bot.get_user(mission['accepted_by'])
+                            guild = self.bot.get_guild(mission['guild_id'])
+                            guild_name = guild.name if guild else "Unknown Server"
                             if user:
+                                bonus_text = f" (+{credit_bonus:,} merge bonus)" if credit_bonus > 0 else ""
                                 await user.send(
-                                    f"🎉 **Mission Complete!** {mission['template_name']}\n"
-                                    f"💰 Earned: **{total_credits:,}** credits" +
-                                    (f" (+{credit_bonus:,} merge bonus)" if credit_bonus > 0 else "")
+                                    f"🎉 Your mission, **{mission['template_name']}** [{mission['rarity_rolled']}], "
+                                    f"has completed in **{guild_name}**. It was successful, and you have gained "
+                                    f"**{total_credits:,}** credits!{bonus_text}"
                                 )
                         except:
                             pass
@@ -731,10 +807,12 @@ class MissionCommands(commands.Cog):
                         
                         try:
                             user = self.bot.get_user(mission['accepted_by'])
+                            guild = self.bot.get_guild(mission['guild_id'])
+                            guild_name = guild.name if guild else "Unknown Server"
                             if user:
                                 await user.send(
-                                    f"❌ **Mission Failed!** {mission['template_name']}\n"
-                                    f"Better luck next time! The acceptance cost was lost."
+                                    f"❌ Your mission, **{mission['template_name']}** [{mission['rarity_rolled']}], "
+                                    f"has completed in **{guild_name}**. It was a failure."
                                 )
                         except:
                             pass
