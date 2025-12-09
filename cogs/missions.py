@@ -611,6 +611,11 @@ class MissionCommands(commands.Cog):
                        AND ct.field_name = $3 AND ct.field_type = 'number'
                        AND ctf.field_value ~ '^[0-9.]+$'
                        AND CAST(ctf.field_value AS FLOAT) >= $4
+                       AND uc.instance_id NOT IN (
+                           SELECT card_instance_id FROM active_missions 
+                           WHERE status = 'active' AND started_at IS NOT NULL 
+                           AND card_instance_id IS NOT NULL
+                       )
                        LIMIT 1""",
                     user_id, actual_card_name, mission['requirement_field'], mission['requirement_rolled'], target_merge_level
                 )
@@ -627,6 +632,11 @@ class MissionCommands(commands.Cog):
                        AND ct.field_name = $3 AND ct.field_type = 'number'
                        AND ctf.field_value ~ '^[0-9.]+$'
                        AND CAST(ctf.field_value AS FLOAT) >= $4
+                       AND uc.instance_id NOT IN (
+                           SELECT card_instance_id FROM active_missions 
+                           WHERE status = 'active' AND started_at IS NOT NULL 
+                           AND card_instance_id IS NOT NULL
+                       )
                        ORDER BY uc.merge_level DESC
                        LIMIT 1""",
                     user_id, actual_card_name, mission['requirement_field'], mission['requirement_rolled']
@@ -783,6 +793,11 @@ class MissionCommands(commands.Cog):
                    AND ctf.field_value ~ '^[0-9.]+$'
                    AND CAST(ctf.field_value AS FLOAT) >= $3
                    AND LOWER(c.name) LIKE LOWER($4)
+                   AND uc.instance_id NOT IN (
+                       SELECT card_instance_id FROM active_missions 
+                       WHERE status = 'active' AND started_at IS NOT NULL 
+                       AND card_instance_id IS NOT NULL
+                   )
                    ORDER BY uc.merge_level DESC, c.name
                    LIMIT 25""",
                 user_id, mission['requirement_field'], mission['requirement_rolled'],
