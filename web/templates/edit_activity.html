@@ -285,8 +285,13 @@
             <h3>Rarity Scaling</h3>
             <p style="color: #6b7280; margin-bottom: 1rem;">
                 Configure how mission parameters scale based on rarity. Multipliers are applied to the Mythic baseline values.
-                Success rate determines the chance of mission success when the duration completes.
             </p>
+            
+            <div class="info-box" style="background: #f0f9ff; border-color: #3b82f6;">
+                <strong>Success Rate:</strong> Mission success is determined by comparing the card's rarity to the mission's rarity. 
+                Using a higher-rarity card on a lower-rarity mission increases success chance (up to 99%). 
+                Using a lower-rarity card decreases it (minimum 5%).
+            </div>
             
             <table class="rarity-scaling-table">
                 <thead>
@@ -295,19 +300,18 @@
                         <th>Requirement Multiplier</th>
                         <th>Reward Multiplier</th>
                         <th>Duration Multiplier</th>
-                        <th>Success Rate (%)</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% set rarities = ['Common', 'Uncommon', 'Exceptional', 'Rare', 'Epic', 'Legendary', 'Mythic'] %}
                     {% set default_scaling = {
-                        'Common': {'req': 0.3, 'reward': 0.2, 'dur': 0.5, 'rate': 40},
-                        'Uncommon': {'req': 0.4, 'reward': 0.3, 'dur': 0.6, 'rate': 50},
-                        'Exceptional': {'req': 0.5, 'reward': 0.4, 'dur': 0.7, 'rate': 60},
-                        'Rare': {'req': 0.6, 'reward': 0.5, 'dur': 0.8, 'rate': 65},
-                        'Epic': {'req': 0.75, 'reward': 0.7, 'dur': 0.9, 'rate': 75},
-                        'Legendary': {'req': 0.9, 'reward': 0.85, 'dur': 0.95, 'rate': 90},
-                        'Mythic': {'req': 1.0, 'reward': 1.0, 'dur': 1.0, 'rate': 99}
+                        'Common': {'req': 0.3, 'reward': 0.2, 'dur': 0.5},
+                        'Uncommon': {'req': 0.4, 'reward': 0.3, 'dur': 0.6},
+                        'Exceptional': {'req': 0.5, 'reward': 0.4, 'dur': 0.7},
+                        'Rare': {'req': 0.6, 'reward': 0.5, 'dur': 0.8},
+                        'Epic': {'req': 0.75, 'reward': 0.7, 'dur': 0.9},
+                        'Legendary': {'req': 0.9, 'reward': 0.85, 'dur': 0.95},
+                        'Mythic': {'req': 1.0, 'reward': 1.0, 'dur': 1.0}
                     } %}
                     {% for rarity in rarities %}
                     {% set scaling = rarity_scaling.get(rarity, default_scaling[rarity]) if rarity_scaling else default_scaling[rarity] %}
@@ -327,11 +331,6 @@
                             <input type="number" name="scaling_{{ rarity }}_dur" 
                                    step="0.01" min="0.1" max="2.0"
                                    value="{{ scaling.duration_multiplier if scaling.duration_multiplier is defined else scaling.dur }}">
-                        </td>
-                        <td>
-                            <input type="number" name="scaling_{{ rarity }}_rate" 
-                                   step="1" min="1" max="99"
-                                   value="{{ scaling.success_rate if scaling.success_rate is defined else scaling.rate }}">
                         </td>
                     </tr>
                     {% endfor %}

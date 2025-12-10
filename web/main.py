@@ -1126,14 +1126,13 @@ async def create_card_activity(
                 req_mult = float(form_data.get(f'scaling_{rarity}_req', 1.0))
                 reward_mult = float(form_data.get(f'scaling_{rarity}_reward', 1.0))
                 dur_mult = float(form_data.get(f'scaling_{rarity}_dur', 1.0))
-                success_rate = float(form_data.get(f'scaling_{rarity}_rate', 50.0))
                 
                 await conn.execute(
                     """UPDATE mission_rarity_scaling 
                        SET requirement_multiplier = $1, reward_multiplier = $2, 
-                           duration_multiplier = $3, success_rate = $4
-                       WHERE mission_template_id = $5 AND rarity = $6""",
-                    req_mult, reward_mult, dur_mult, success_rate, mission_template_id, rarity
+                           duration_multiplier = $3
+                       WHERE mission_template_id = $4 AND rarity = $5""",
+                    req_mult, reward_mult, dur_mult, mission_template_id, rarity
                 )
     
     return RedirectResponse(url=f"/deck/{deck_id}/activities", status_code=303)
@@ -1242,17 +1241,16 @@ async def update_card_activity(
                 req_mult = float(form_data.get(f'scaling_{rarity}_req', 1.0))
                 reward_mult = float(form_data.get(f'scaling_{rarity}_reward', 1.0))
                 dur_mult = float(form_data.get(f'scaling_{rarity}_dur', 1.0))
-                success_rate = float(form_data.get(f'scaling_{rarity}_rate', 50.0))
                 
                 await conn.execute(
                     """INSERT INTO mission_rarity_scaling 
                        (mission_template_id, rarity, requirement_multiplier, reward_multiplier, 
-                        duration_multiplier, success_rate)
-                       VALUES ($1, $2, $3, $4, $5, $6)
+                        duration_multiplier)
+                       VALUES ($1, $2, $3, $4, $5)
                        ON CONFLICT (mission_template_id, rarity) 
                        DO UPDATE SET requirement_multiplier = $3, reward_multiplier = $4, 
-                                     duration_multiplier = $5, success_rate = $6""",
-                    mission_template_id, rarity, req_mult, reward_mult, dur_mult, success_rate
+                                     duration_multiplier = $5""",
+                    mission_template_id, rarity, req_mult, reward_mult, dur_mult
                 )
     
     return RedirectResponse(url=f"/deck/{deck_id}/activities", status_code=303)
