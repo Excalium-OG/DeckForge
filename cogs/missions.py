@@ -29,6 +29,25 @@ RARITY_COLORS = {
     'Mythic': 0xEF4444
 }
 
+SUCCESS_RATE_MATRIX = {
+    'Common': {'Common': 90, 'Uncommon': 92, 'Exceptional': 94, 'Rare': 95, 'Epic': 96, 'Legendary': 97, 'Mythic': 99},
+    'Uncommon': {'Common': 60, 'Uncommon': 90, 'Exceptional': 92, 'Rare': 94, 'Epic': 95, 'Legendary': 97, 'Mythic': 99},
+    'Exceptional': {'Common': 45, 'Uncommon': 65, 'Exceptional': 90, 'Rare': 92, 'Epic': 94, 'Legendary': 96, 'Mythic': 99},
+    'Rare': {'Common': 30, 'Uncommon': 45, 'Exceptional': 60, 'Rare': 90, 'Epic': 95, 'Legendary': 97, 'Mythic': 99},
+    'Epic': {'Common': 15, 'Uncommon': 30, 'Exceptional': 50, 'Rare': 70, 'Epic': 90, 'Legendary': 95, 'Mythic': 97},
+    'Legendary': {'Common': 10, 'Uncommon': 20, 'Exceptional': 40, 'Rare': 60, 'Epic': 75, 'Legendary': 90, 'Mythic': 95},
+    'Mythic': {'Common': 5, 'Uncommon': 10, 'Exceptional': 20, 'Rare': 40, 'Epic': 60, 'Legendary': 75, 'Mythic': 90}
+}
+
+def get_success_rate(mission_rarity: str, card_rarity: str) -> int:
+    """Get success rate based on mission rarity vs card rarity"""
+    return SUCCESS_RATE_MATRIX.get(mission_rarity, {}).get(card_rarity, 50)
+
+def format_success_rates_for_mission(mission_rarity: str) -> str:
+    """Format success rates for display in mission embed"""
+    rates = SUCCESS_RATE_MATRIX.get(mission_rarity, {})
+    return " | ".join([f"{r[:3]} {rates.get(r, 50)}%" for r in RARITY_HIERARCHY])
+
 class MissionCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -248,18 +267,7 @@ class MissionCommands(commands.Cog):
         
         acceptance_cost = int(reward_rolled * 0.05)
         
-        all_scaling = await conn.fetch(
-            """SELECT rarity, success_rate FROM mission_rarity_scaling 
-               WHERE mission_template_id = $1
-               ORDER BY CASE rarity 
-                   WHEN 'Common' THEN 1 WHEN 'Uncommon' THEN 2 
-                   WHEN 'Exceptional' THEN 3 WHEN 'Rare' THEN 4 
-                   WHEN 'Epic' THEN 5 WHEN 'Legendary' THEN 6 
-                   WHEN 'Mythic' THEN 7 END""",
-            template['mission_template_id']
-        )
-        
-        success_rates = " | ".join([f"{r['rarity'][:3]} {int(r['success_rate'])}%" for r in all_scaling])
+        success_rates = format_success_rates_for_mission(selected_rarity)
         
         embed = discord.Embed(
             title=f"🚀 Mission: {template['name']} [{selected_rarity.upper()}]",
@@ -653,13 +661,9 @@ class MissionCommands(commands.Cog):
             mission_end = now + timedelta(hours=mission['duration_rolled_hours'])
             
             card_rarity = qualifying_card['rarity']
-            scaling = await conn.fetchrow(
-                """SELECT success_rate FROM mission_rarity_scaling 
-                   WHERE mission_template_id = $1 AND rarity = $2""",
-                mission['mission_template_id'], card_rarity
-            )
+            mission_rarity = mission['rarity_rolled']
             
-            base_success_rate = scaling['success_rate'] if scaling else 50.0
+            base_success_rate = get_success_rate(mission_rarity, card_rarity)
             merge_bonus = qualifying_card['merge_level'] * 5
             final_success_rate = min(99, base_success_rate + merge_bonus)
             
@@ -849,24 +853,29 @@ class MissionCommands(commands.Cog):
                 )
             
             completed_missions = await conn.fetch(
-                """SELECT am.*, mt.name as template_name, mrs.success_rate
+                """SELECT am.*, mt.name as template_name
                    FROM active_missions am
                    JOIN mission_templates mt ON am.mission_template_id = mt.mission_template_id
-                   JOIN mission_rarity_scaling mrs ON mt.mission_template_id = mrs.mission_template_id
-                   WHERE am.status = 'active' AND am.mission_expires_at < $1
-                   AND mrs.rarity = am.rarity_rolled""",
+                   WHERE am.status = 'active' AND am.mission_expires_at < $1""",
                 now
             )
             
             for mission in completed_missions:
                 try:
                     uc = await conn.fetchrow(
-                        "SELECT merge_level FROM user_cards WHERE instance_id = $1",
+                        """SELECT uc.merge_level, c.rarity 
+                           FROM user_cards uc
+                           JOIN cards c ON uc.card_id = c.card_id
+                           WHERE uc.instance_id = $1""",
                         mission['card_instance_id']
                     )
                     merge_level = uc['merge_level'] if uc else 0
+                    card_rarity = uc['rarity'] if uc else 'Common'
+                    mission_rarity = mission['rarity_rolled']
+                    
+                    base_success_rate = get_success_rate(mission_rarity, card_rarity)
                     merge_bonus = merge_level * 5
-                    final_success_rate = min(99, mission['success_rate'] + merge_bonus)
+                    final_success_rate = min(99, base_success_rate + merge_bonus)
                     
                     success = mission['success_roll'] <= final_success_rate
                     
@@ -1112,7 +1121,7 @@ class MissionCommands(commands.Cog):
             
             acceptance_cost = int(reward_rolled * 0.05)
             
-            success_rates = " | ".join([f"{r['rarity'][:3]} {int(r['success_rate'])}%" for r in scaling_rows])
+            success_rates = format_success_rates_for_mission(chosen_rarity)
             
             embed = discord.Embed(
                 title=f"🚀 Mission: {template['name']} [{chosen_rarity.upper()}]",
