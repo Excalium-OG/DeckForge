@@ -18,14 +18,15 @@ Preferred communication style: Simple, everyday language.
 
 ### Data Layer
 - **Database**: PostgreSQL is used for all persistent storage, managed with `asyncpg` for asynchronous operations and connection pooling.
-- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, `rarity_ranges`, `card_templates`, `card_template_fields`, `server_settings`, `card_perks`, `deck_merge_perks`, and `user_card_field_overrides`. `user_cards` uses UUIDs for unique instance tracking with merge level tracking.
+- **Schema**: Key tables include `players`, `cards`, `user_cards`, `drop_rates`, `user_packs`, `trades`, `trade_items`, `decks`, `server_decks`, `rarity_ranges`, `card_templates`, `card_template_fields`, `server_settings`, `card_perks`, `deck_merge_perks`, `user_card_field_overrides`, `mission_templates`, `mission_rarity_scaling`, `active_missions`, `user_missions`, `server_mission_settings`, and `user_mission_cooldowns`. `user_cards` uses UUIDs for unique instance tracking with merge level tracking.
 - **Custom Card Templates**: The `card_templates` table stores custom field definitions per deck (field name, type, required flag, display order), while `card_template_fields` stores actual field values for each card. Supports text, number, and dropdown field types.
 - **Server Settings**: The `server_settings` table stores per-server configurations including active deck assignments and customizations.
 - **Merge System**: The `card_perks` table tracks perk progression history for merged cards, while `deck_merge_perks` defines available merge perks and their scaling parameters per deck. Cards have `mergeable` and `max_merge_level` attributes, while user card instances track `merge_level` and `locked_perk`. The `user_card_field_overrides` table stores instance-specific boosted field values, automatically applying cumulative percentage boosts to numeric template fields that match the locked perk name.
 
 ### Core Game Mechanics
 - **Pack System**: Three pack types (Normal, Booster, Booster+). Users can claim a free Normal Pack every 8 hours or purchase packs with credits. Packs have a 30-item inventory limit, and Booster Packs apply rarity multipliers.
-- **Card System**: Seven-tier rarity system (Common to Mythic) with configurable weighted drop rates per guild. Cards are instance-based (UUID) and sorted by rarity then alphabetically. Cards can be designated as mergeable with configurable max merge levels.
+- **Card System**: Seven-tier rarity system (Common to Mythic) with configurable weighted drop rates per deck. Cards are instance-based (UUID) and sorted by rarity then alphabetically. Cards can be designated as mergeable with configurable max merge levels.
+- **Drop Rate System**: Drop rates are managed at the deck level by deck creators only (via web portal). All servers that adopt a deck share the same drop rates. The `!viewdroprates` command shows the deck's current rates.
 - **Card Merge System**: Progressive card upgrading through merge operations. Mergeable cards can be combined (2 cards of same type and level → 1 card of next level). Features include:
   - **Perk Selection**: On first merge (level 0→1), players select a characteristic to boost from available merge perks
   - **Perk Locking**: Selected perk is locked for all future merges of that card instance. Cards with different locked perks cannot be merged together, preserving distinct progression paths.
@@ -45,10 +46,25 @@ Preferred communication style: Simple, everyday language.
   - **Inventory Validation**: Verifies card ownership at specific merge levels before allowing trades
   - **Atomic Transfers**: All card transfers happen in a single transaction to prevent data loss
   - **Safety Features**: 5-minute timeout, deck validation, and automatic acceptance reset when trade pool changes
+- **Card Activity Mission System**: Deck creators configure mission templates that spawn based on server chat activity. Features include:
+  - **Activity-Based Spawning**: Missions spawn after 10+ messages from 2+ unique users, with 1-hour cooldown between spawns per server
+  - **Rarity Scaling**: Each mission template has configurable rarity tiers with different success rates (70% Common to 30% Mythic), requirements, rewards, and durations
+  - **Reaction-Based Acceptance**: Missions appear as embeds in a designated channel with 20-minute reaction window
+  - **Acceptance Cost**: 5% upfront cost of mission reward to prevent spam acceptance; 4-hour per-user cooldown
+  - **Card Requirement**: Players must own a card with the specified numeric field meeting or exceeding the rolled requirement
+  - **Success Mechanics**: Base success rate varies by rarity, +5% per merge level (max +99%). Success determined when mission duration expires
+  - **Credit Rewards**: Successful missions award rolled credits plus 5% per merge level bonus; failed missions forfeit acceptance cost
+  - **Mission Commands**: `/startmission` (with autocomplete for qualifying cards) to begin, `/mymissions` to view active missions
+  - **User Feedback System**: Enhanced DM notifications for mission events:
+    - **Acceptance Success**: DM includes acceptance cost, 4-hour cooldown timer with Discord timestamp, and next steps
+    - **Acceptance Failure**: DM explains failure reason (insufficient credits, no qualifying card, or cooldown); user's reaction is removed
+    - **Mission Completion**: DM with format "Your mission, [Name] [Rarity], has completed in [Server]. It was successful/a failure." with credit earnings
+    - **Cooldown Expiration**: Automatic DM when 4-hour cooldown expires: "Your mission cooldown is ready in [Server], you can accept a new mission!"
 
 ### Web Admin Portal Features
-- **Dashboard**: Displays user info, managed Discord servers, assigned decks, and user-created decks.
-- **Deck Management**: Allows creation, editing (adding/deleting cards with detailed specifications), and viewing of cards within a deck.
+- **Dashboard**: Displays user info, managed Discord servers, assigned decks (showing both created and adopted decks), and deck assignment controls.
+- **Deck Adoption System**: Reference-based model where adopting a public deck from the marketplace creates a link to the original deck rather than cloning it. All servers using the same deck share identical content. Only deck creators can edit; adopters can view and use but not modify.
+- **Deck Management**: Allows creation, editing (adding/deleting cards with detailed specifications), and viewing of cards within a deck. Edit access restricted to deck creators only.
 - **Card Merge Configuration**: When creating cards, deck owners can designate cards as mergeable and set max merge levels (1-100, default 10).
 - **Rarity Rate Editor**: Configurable drop rates per rarity tier for decks, with real-time validation to ensure rates sum to 100%.
 - **Image Upload**: Direct file upload from client device using Replit object storage with presigned URLs for secure, scalable image hosting.
@@ -64,10 +80,11 @@ Preferred communication style: Simple, everyday language.
 - **Discord Bot**: Admin commands support image uploads via Discord attachments, stored as URLs in the database.
 
 ### Command Design Patterns
-- **Slash Commands**: 16 slash commands implemented using hybrid commands (work as both `/` and `!`):
+- **Slash Commands**: 18 slash commands implemented using hybrid commands (work as both `/` and `!`):
   - Card commands: `/drop`, `/mycards`, `/recycle` (with autocomplete for card_name), `/merge` (with autocomplete for card_name and perk_name) - Hybrid commands
   - Pack commands: `/claimfreepack`, `/buypack`, `/mypacks` - Hybrid commands
   - Trading commands: `/requesttrade`, `/accepttrade`, `/tradeadd` (with autocomplete for card_name), `/traderemove` (with autocomplete for card_name), `/finalize` - Hybrid commands
+  - Mission commands: `/startmission` (with autocomplete for qualifying cards), `/mymissions` - Hybrid commands
   - Info commands: `/cardinfo` (with autocomplete and optional merge_level parameter), `/help`, `/balance`, `/buycredits` - Pure slash commands
 - **Autocomplete Support**: Commands like `/recycle`, `/merge`, `/tradeadd`, `/traderemove`, and `/cardinfo` use Discord's autocomplete feature to show relevant choices as users type, with merge level indicators where applicable
 - **Hybrid Command Architecture**: Commands use `ctx.defer()` for slash invocations to prevent 3-second timeout errors

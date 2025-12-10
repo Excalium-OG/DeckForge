@@ -1,0 +1,76 @@
+Task: Implement a new "Card Activity Mission System" feature for DeckForge.
+
+Feature Overview:
+- Deck creators can add card activities to their decks (similar to merge perks).
+- Initial activity type: Mission. (Versus and Tournament activity types will be added later.)
+- Only the deck creator can configure card activities.
+- Missions are tied to card attributes and scale based on rarity.
+
+Workflow:
+1. Deck Creator UI
+   - On the "Edit Deck" page, add an "Add Card Activity" button.
+   - User clicks button and is directed to the new "Edit Card Activity" html page.
+   - User enters name into the name field for this mission template
+   - User selects activity type from a drop-down ("Mission" only for now).
+   - Mission-specific parameters become visible:
+     - Mission requirement (select a numeric card attribute, e.g., Payload Capacity).
+     - Minimum requirement value (e.g., 85,000).
+     - Success reward credits (e.g., 1,500).
+     - Mission duration (e.g., 48 hours).
+     - Mission description.
+   - Display note: "Use Mythic missions as a basis, since mission parameters scale based on rarity."
+
+2. Mission Parameters
+   - Random mission drops apply ±5% variance to requirements, rewards, and duration.
+   - Mission rarity is randomized; scaling adjusts values based on rarity. 
+   - Higher rarity missions have a longer duration, lower rarity missions have a shorter duration.
+   - Success rates by rarity (example for Legendary missions):
+     - Common: 40%
+     - Rare: 65%
+     - Legendary: 90%
+     - Mythic: 99%
+   - No mission should ever have 100% success.
+   - Merged cards provide a diminishing bonus (+5% credits per merge level).
+
+3. Mission Posting
+   - Missions are sent to the `card_activity_channel` selected by the deck creator/adopter.
+   - If no channel is selected, missions remain disabled.
+   - Bot monitors chat activity in accessible channels:
+     - Minimum activity: 10 messages between at least 2 users.
+     - Missions spawn hourly if activity threshold is met.
+     - More activity increases chance of higher rarity missions.
+
+4. Mission Acceptance
+   - Missions appear as embeds with parameters, success rates, and acceptance cost.
+   - Acceptance cost = 5% of reward credits, deducted upfront.
+   - Users must react within 20 minutes to accept.
+   - Acceptance requires at least one card meeting minimum requirements.
+   - Mission lifecycle:
+     - `pending` → user has 1 day to start with `/startmission [card_name]`.
+     - `active` → mission runs for set duration.
+     - `completed` → success/failure determined by rarity; credits rewarded on success.
+     - `rejected` → user cancels mission.
+     - `expired` → user fails to start within 1 day or misses reaction window.
+   - Cooldown: 4 hours between mission acceptances per player.
+
+5. Transparency
+   - Mission embed must display:
+     - Mission parameters (requirement, minimum value, reward, duration, description).
+     - Success rates per card rarity.
+     - Acceptance cost (5% of reward).
+   - Example embed:
+     ```
+     🚀 Mission: Payload Delivery [LEGENDARY]
+     Requirement: Payload Capacity ≥ 85,000
+     Reward: 1,500 credits (Acceptance cost: 75 credits)
+     Duration: 48 hours
+     Success Rates: Common 40% | Rare 65% | Legendary 90% | Mythic 99%
+     Description: Deliver critical supplies to the frontier.
+     ```
+
+Implementation Notes:
+- Add mission state machine (`pending`, `active`, `completed`, `rejected`, `expired`).
+- Track per-user cooldown (`last_mission_accept_time`).
+- Deduct credits immediately upon acceptance.
+- Log mission events for auditing and debugging.
+- Ensure multiple missions can coexist per server, but enforce per-user cooldown.

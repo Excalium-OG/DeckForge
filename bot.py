@@ -32,6 +32,7 @@ class DeckForgeBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.guilds = True
+        intents.reactions = True
         
         super().__init__(
             command_prefix=COMMAND_PREFIX,
@@ -63,6 +64,7 @@ class DeckForgeBot(commands.Bot):
         await self.load_extension('cogs.packs')
         await self.load_extension('cogs.trading')
         await self.load_extension('cogs.merge')  # Card merge system
+        await self.load_extension('cogs.missions')  # Mission system
         await self.load_extension('cogs.future')
         await self.load_extension('cogs.slash_commands')  # Slash command support
         print("✅ Loaded all cogs")
@@ -79,7 +81,9 @@ class DeckForgeBot(commands.Bot):
             'db/migrations/0007_card_templates.sql',
             'db/migrations/0008_merge_system.sql',
             'db/migrations/0009_trade_merge_levels.sql',
-            'db/migrations/0010_field_overrides.sql'
+            'db/migrations/0010_field_overrides.sql',
+            'db/migrations/0011_mission_system.sql',
+            'db/migrations/0012_cooldown_notification.sql'
         ]
         
         async with self.db_pool.acquire() as conn:

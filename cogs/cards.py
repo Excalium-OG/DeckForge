@@ -34,7 +34,6 @@ RECYCLE_VALUES = {
 }
 from utils.drop_helpers import (
     get_default_drop_rates,
-    validate_drop_rates,
     select_rarity_by_weight,
     format_drop_rates_table
 )
@@ -57,28 +56,6 @@ class CardCommands(commands.Cog):
         """Check if user is an admin"""
         return user_id in self.admin_ids or user_id == self.bot.owner_id
     
-    async def get_guild_drop_rates(self, conn, guild_id: Optional[int]) -> dict:
-        """Get drop rates for a guild, or defaults if not configured (DEPRECATED - use get_deck_drop_rates)"""
-        if not guild_id:
-            return get_default_drop_rates()
-        
-        # Fetch guild-specific rates
-        rates_rows = await conn.fetch(
-            "SELECT rarity, percentage FROM drop_rates WHERE guild_id = $1",
-            guild_id
-        )
-        
-        if not rates_rows:
-            return get_default_drop_rates()
-        
-        rates = {row['rarity']: row['percentage'] for row in rates_rows}
-        
-        # Ensure all rarities are present
-        for rarity in RARITY_HIERARCHY:
-            if rarity not in rates:
-                return get_default_drop_rates()
-        
-        return rates
     
     async def get_deck_drop_rates(self, conn, deck_id: int) -> dict:
         """Get drop rates for a deck from rarity_ranges table"""
@@ -631,7 +608,7 @@ class CardCommands(commands.Cog):
     @commands.command(name='viewdroprates')
     async def view_drop_rates(self, ctx):
         """
-        View current drop rates for this server.
+        View current drop rates for this server's assigned deck.
         Usage: !viewdroprates
         """
         guild_id = ctx.guild.id if ctx.guild else None
@@ -640,19 +617,26 @@ class CardCommands(commands.Cog):
             await ctx.send("❌ This command can only be used in a server!")
             return
         
-        async with self.db_pool.acquire() as conn:
-            drop_rates = await self.get_guild_drop_rates(conn, guild_id)
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
         
-        # Check if using defaults
-        rates_rows = await self.db_pool.fetchrow(
-            "SELECT COUNT(*) as count FROM drop_rates WHERE guild_id = $1",
-            guild_id
-        )
-        using_defaults = rates_rows['count'] == 0 if rates_rows else True
+        async with self.db_pool.acquire() as conn:
+            drop_rates = await self.get_deck_drop_rates(conn, deck['deck_id'])
+            
+            rates_rows = await conn.fetch(
+                "SELECT COUNT(*) as count FROM rarity_ranges WHERE deck_id = $1",
+                deck['deck_id']
+            )
+            using_defaults = rates_rows[0]['count'] == 0 if rates_rows else True
         
         embed = discord.Embed(
-            title="🎲 Drop Rates Configuration",
-            description="Current card drop rates for this server:",
+            title="🎲 Drop Rates",
+            description=f"Card drop rates for **{deck['name']}**:",
             color=discord.Color.blue()
         )
         
@@ -663,89 +647,9 @@ class CardCommands(commands.Cog):
         )
         
         if using_defaults:
-            embed.set_footer(text="Using default rates. Admins can customize with !setdroprate")
+            embed.set_footer(text="Using default rates. Deck creators can customize rates via the web portal.")
         else:
-            embed.set_footer(text="Custom rates configured for this server")
-        
-        await ctx.send(embed=embed)
-    
-    @commands.command(name='setdroprate')
-    async def set_drop_rate(self, ctx, rarity: str, percentage: float):
-        """
-        [ADMIN] Set the drop rate for a specific rarity.
-        Usage: !setdroprate [rarity] [percentage]
-        Example: !setdroprate Legendary 5
-        """
-        # Check admin permission
-        if not self.is_admin(ctx.author.id):
-            await ctx.send("❌ This command is admin-only!")
-            return
-        
-        guild_id = ctx.guild.id if ctx.guild else None
-        if not guild_id:
-            await ctx.send("❌ This command can only be used in a server!")
-            return
-        
-        # Validate rarity
-        rarity = rarity.capitalize()
-        if not validate_rarity(rarity):
-            await ctx.send(
-                f"❌ Invalid rarity! Must be one of: {', '.join(RARITY_HIERARCHY)}"
-            )
-            return
-        
-        # Validate percentage
-        if percentage < 0 or percentage > 100:
-            await ctx.send("❌ Percentage must be between 0 and 100!")
-            return
-        
-        async with self.db_pool.acquire() as conn:
-            # Get current rates for this guild
-            current_rates = await self.get_guild_drop_rates(conn, guild_id)
-            
-            # Update the specified rarity
-            current_rates[rarity] = percentage
-            
-            # Validate total sum
-            is_valid, error_msg = validate_drop_rates(current_rates)
-            if not is_valid:
-                await ctx.send(f"❌ {error_msg}")
-                return
-            
-            # Update database - store ALL rarities for this guild to ensure consistency
-            async with conn.transaction():
-                # Delete existing rates for this guild
-                await conn.execute(
-                    "DELETE FROM drop_rates WHERE guild_id = $1",
-                    guild_id
-                )
-                
-                # Insert all rarities with updated values
-                for r in RARITY_HIERARCHY:
-                    await conn.execute(
-                        """INSERT INTO drop_rates (guild_id, rarity, percentage)
-                           VALUES ($1, $2, $3)""",
-                        guild_id, r, current_rates[r]
-                    )
-        
-        # Show updated rates
-        embed = discord.Embed(
-            title="✅ Drop Rate Updated!",
-            description=f"**{rarity}** drop rate set to **{percentage}%**",
-            color=discord.Color.green()
-        )
-        
-        embed.add_field(
-            name="Updated Rates",
-            value=format_drop_rates_table(current_rates),
-            inline=False
-        )
-        
-        total = sum(current_rates.values())
-        if abs(total - 100.0) < 0.01:
-            embed.set_footer(text="✅ All rates configured correctly (total = 100%)")
-        else:
-            embed.set_footer(text=f"⚠️ Total is {total}% - adjust other rarities to reach 100%")
+            embed.set_footer(text="Custom rates set by deck creator. Applies to all servers using this deck.")
         
         await ctx.send(embed=embed)
 

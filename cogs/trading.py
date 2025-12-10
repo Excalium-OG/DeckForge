@@ -94,7 +94,6 @@ class TradingCommands(commands.Cog):
         deck_id = deck['deck_id']
         
         async with self.db_pool.acquire() as conn:
-            # Get all cards the player owns, grouped by card_id and merge_level
             owned_cards = await conn.fetch(
                 """
                 SELECT 
@@ -107,6 +106,11 @@ class TradingCommands(commands.Cog):
                 WHERE uc.user_id = $1 
                   AND c.deck_id = $2
                   AND uc.recycled_at IS NULL
+                  AND uc.instance_id NOT IN (
+                      SELECT card_instance_id FROM active_missions 
+                      WHERE status = 'active' AND started_at IS NOT NULL 
+                      AND card_instance_id IS NOT NULL
+                  )
                 GROUP BY c.card_id, c.name, uc.merge_level
                 ORDER BY c.name, uc.merge_level
                 """,
@@ -192,17 +196,27 @@ class TradingCommands(commands.Cog):
             return choices[:25]
     
     async def check_user_card_count(self, conn, user_id: int, card_id: int, merge_level: int = None) -> int:
-        """Count how many non-recycled instances of a card a user owns at a specific merge level"""
+        """Count how many non-recycled instances of a card a user owns at a specific merge level (excludes cards in active missions)"""
         if merge_level is not None:
             count = await conn.fetchval(
                 """SELECT COUNT(*) FROM user_cards
-                   WHERE user_id = $1 AND card_id = $2 AND merge_level = $3 AND recycled_at IS NULL""",
+                   WHERE user_id = $1 AND card_id = $2 AND merge_level = $3 AND recycled_at IS NULL
+                   AND instance_id NOT IN (
+                       SELECT card_instance_id FROM active_missions 
+                       WHERE status = 'active' AND started_at IS NOT NULL 
+                       AND card_instance_id IS NOT NULL
+                   )""",
                 user_id, card_id, merge_level
             )
         else:
             count = await conn.fetchval(
                 """SELECT COUNT(*) FROM user_cards
-                   WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL""",
+                   WHERE user_id = $1 AND card_id = $2 AND recycled_at IS NULL
+                   AND instance_id NOT IN (
+                       SELECT card_instance_id FROM active_missions 
+                       WHERE status = 'active' AND started_at IS NOT NULL 
+                       AND card_instance_id IS NOT NULL
+                   )""",
                 user_id, card_id
             )
         return count or 0
