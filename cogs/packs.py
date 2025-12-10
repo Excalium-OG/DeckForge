@@ -23,9 +23,9 @@ from utils.pack_logic import (
 
 # Pack prices in credits
 PACK_PRICES = {
-    'Normal Pack': 100,
-    'Booster Pack': 300,
-    'Booster Pack+': 500
+    'Normal Pack': 300,
+    'Booster Pack': 500,
+    'Booster Pack+': 650
 }
 
 
