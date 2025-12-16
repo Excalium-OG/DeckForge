@@ -1012,12 +1012,12 @@ class MissionCommands(commands.Cog):
             )
             
             for m in missions:
-                if m['status'] == 'pending':
-                    status = "⏳ Pending (use /startmission)"
+                if m['started_at'] is None:
+                    status = "⏳ Accepted (use /startmission)"
                     time_label = "Expires"
                     expires = m['mission_expires_at']
                 else:
-                    status = "🚀 Active"
+                    status = "🚀 In Progress"
                     time_label = "Completes"
                     expires = m['mission_expires_at']
                 
