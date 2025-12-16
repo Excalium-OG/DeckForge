@@ -3,11 +3,12 @@ DeckForge Pack Commands Cog
 Handles pack inventory, claiming, and trading commands
 """
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
+from discord import app_commands
 import asyncpg
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timezone, timedelta
+from typing import Optional, List
 
 from utils.card_helpers import (
     check_drop_cooldown,
@@ -36,6 +37,69 @@ class PackCommands(commands.Cog):
         self.bot = bot
         self.db_pool: asyncpg.Pool = bot.db_pool
         self.admin_ids = bot.admin_ids
+        self.freepack_notification_loop.start()
+    
+    def cog_unload(self):
+        self.freepack_notification_loop.cancel()
+    
+    @tasks.loop(minutes=5)
+    async def freepack_notification_loop(self):
+        """Check and send free pack notifications to users"""
+        await self.bot.wait_until_ready()
+        await self.process_freepack_notifications()
+    
+    async def process_freepack_notifications(self):
+        """Send DMs to users whose free pack cooldowns have expired"""
+        now = datetime.now(timezone.utc)
+        
+        async with self.db_pool.acquire() as conn:
+            notifications_to_send = await conn.fetch(
+                """SELECT ufn.user_id, ufn.deck_id, d.name as deck_name,
+                          d.free_pack_cooldown_hours,
+                          p.last_drop_ts, sd.guild_id
+                   FROM user_freepack_notifications ufn
+                   JOIN decks d ON ufn.deck_id = d.deck_id
+                   JOIN server_decks sd ON d.deck_id = sd.deck_id
+                   LEFT JOIN players p ON ufn.user_id = p.user_id
+                   WHERE ufn.enabled = TRUE
+                   AND (
+                       p.last_drop_ts IS NULL 
+                       OR p.last_drop_ts + (COALESCE(d.free_pack_cooldown_hours, 8) || ' hours')::INTERVAL <= $1
+                   )
+                   AND (
+                       ufn.last_notified_at IS NULL 
+                       OR ufn.last_notified_at < p.last_drop_ts
+                       OR (p.last_drop_ts IS NULL AND ufn.last_notified_at < $1 - INTERVAL '1 hour')
+                   )""",
+                now
+            )
+            
+            notified_users = set()
+            
+            for notif in notifications_to_send:
+                user_deck_key = (notif['user_id'], notif['deck_id'])
+                if user_deck_key in notified_users:
+                    continue
+                
+                try:
+                    user = self.bot.get_user(notif['user_id'])
+                    guild = self.bot.get_guild(notif['guild_id'])
+                    
+                    if user and guild:
+                        await user.send(
+                            f"📦 Your free pack cooldown is ready in **{guild.name}**! "
+                            f"Use `/claimfreepack` to get your free pack."
+                        )
+                        notified_users.add(user_deck_key)
+                        
+                        await conn.execute(
+                            """UPDATE user_freepack_notifications 
+                               SET last_notified_at = $1
+                               WHERE user_id = $2 AND deck_id = $3""",
+                            now, notif['user_id'], notif['deck_id']
+                        )
+                except Exception as e:
+                    print(f"Error sending free pack notification to user {notif['user_id']}: {e}")
     
     def is_admin(self, user_id: int) -> bool:
         """Check if user is an admin"""
@@ -488,6 +552,59 @@ class PackCommands(commands.Cog):
             f"Pack trading functionality will be implemented in a future update.\n"
             f"Trade ID: {trade_id}"
         )
+    
+    @commands.hybrid_command(name='freepacknotify', description="Toggle DM notifications for free pack cooldowns")
+    @app_commands.describe(toggle="Enable or disable free pack notifications")
+    @app_commands.choices(toggle=[
+        app_commands.Choice(name="on", value="on"),
+        app_commands.Choice(name="off", value="off")
+    ])
+    async def freepack_notify(self, ctx, toggle: str):
+        """
+        Toggle DM notifications for when your free pack cooldown is ready.
+        Usage: /freepacknotify on  or  /freepacknotify off
+        """
+        if ctx.interaction:
+            await ctx.defer()
+        
+        user_id = ctx.author.id
+        guild_id = ctx.guild.id if ctx.guild else None
+        
+        if not guild_id:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+        
+        deck = await self.bot.get_server_deck(guild_id)
+        if not deck:
+            await ctx.send(
+                "❌ No deck assigned to this server!\n"
+                "Ask a server manager to assign a deck via the web admin portal."
+            )
+            return
+        
+        deck_id = deck['deck_id']
+        deck_name = deck['name']
+        enabled = toggle.lower() == 'on'
+        
+        async with self.db_pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO user_freepack_notifications (user_id, deck_id, enabled)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (user_id, deck_id)
+                   DO UPDATE SET enabled = $3""",
+                user_id, deck_id, enabled
+            )
+        
+        if enabled:
+            await ctx.send(
+                f"🔔 Free pack notifications **enabled** for **{deck_name}**!\n"
+                f"You'll receive a DM when your free pack cooldown is ready in this server."
+            )
+        else:
+            await ctx.send(
+                f"🔕 Free pack notifications **disabled** for **{deck_name}**.\n"
+                f"You won't receive DMs about free pack cooldowns in this server."
+            )
 
 
 async def setup(bot):

@@ -80,12 +80,16 @@ Preferred communication style: Simple, everyday language.
 - **Discord Bot**: Admin commands support image uploads via Discord attachments, stored as URLs in the database.
 
 ### Command Design Patterns
-- **Slash Commands**: 18 slash commands implemented using hybrid commands (work as both `/` and `!`):
+- **Slash Commands**: 19 slash commands implemented using hybrid commands (work as both `/` and `!`):
   - Card commands: `/drop`, `/mycards`, `/recycle` (with autocomplete for card_name), `/merge` (with autocomplete for card_name and perk_name) - Hybrid commands
-  - Pack commands: `/claimfreepack`, `/buypack`, `/mypacks` - Hybrid commands
+  - Pack commands: `/claimfreepack`, `/buypack`, `/mypacks`, `/freepacknotify` (on/off toggle for DM notifications) - Hybrid commands
   - Trading commands: `/requesttrade`, `/accepttrade`, `/tradeadd` (with autocomplete for card_name), `/traderemove` (with autocomplete for card_name), `/finalize` - Hybrid commands
   - Mission commands: `/startmission` (with autocomplete for qualifying cards), `/mymissions` - Hybrid commands
   - Info commands: `/cardinfo` (with autocomplete and optional merge_level parameter), `/help`, `/balance`, `/buycredits` - Pure slash commands
+- **DM Notification System**: Users receive DMs for:
+  - **Free Pack Cooldowns**: Toggle with `/freepacknotify on/off` per server deck. Notifies when free pack is available to claim.
+  - **Mission Completion**: Automatic DM when mission ends, indicating success/failure and credits earned.
+  - **Mission Cooldown**: Automatic DM when 4-hour acceptance cooldown expires, allowing new mission acceptance.
 - **Autocomplete Support**: Commands like `/recycle`, `/merge`, `/tradeadd`, `/traderemove`, and `/cardinfo` use Discord's autocomplete feature to show relevant choices as users type, with merge level indicators where applicable
 - **Hybrid Command Architecture**: Commands use `ctx.defer()` for slash invocations to prevent 3-second timeout errors
 - **Help System**: Custom help command filters admin-only commands for non-admin users

@@ -83,7 +83,8 @@ class DeckForgeBot(commands.Bot):
             'db/migrations/0009_trade_merge_levels.sql',
             'db/migrations/0010_field_overrides.sql',
             'db/migrations/0011_mission_system.sql',
-            'db/migrations/0012_cooldown_notification.sql'
+            'db/migrations/0012_cooldown_notification.sql',
+            'db/migrations/0013_freepack_notifications.sql'
         ]
         
         async with self.db_pool.acquire() as conn:
