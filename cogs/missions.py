@@ -1003,16 +1003,18 @@ class MissionCommands(commands.Cog):
             for m in missions:
                 if m['status'] == 'pending':
                     status = "⏳ Pending (use /startmission)"
+                    time_label = "Expires"
                     expires = m['mission_expires_at']
                 else:
                     status = "🚀 Active"
+                    time_label = "Completes"
                     expires = m['mission_expires_at']
                 
                 value = f"**Status:** {status}\n"
                 value += f"**Rarity:** {m['rarity_rolled']}\n"
                 value += f"**Reward:** {m['reward_rolled']:,} credits\n"
                 if expires:
-                    value += f"**Expires:** <t:{int(expires.timestamp())}:R>"
+                    value += f"**{time_label}:** <t:{int(expires.timestamp())}:R>"
                 
                 embed.add_field(
                     name=f"{m['template_name']}",
