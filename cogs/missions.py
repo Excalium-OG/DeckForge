@@ -449,10 +449,12 @@ class MissionCommands(commands.Cog):
                        JOIN cards c ON uc.card_id = c.card_id
                        JOIN card_template_fields ctf ON c.card_id = ctf.card_id
                        JOIN card_templates ct ON ctf.template_id = ct.template_id
+                       LEFT JOIN user_card_field_overrides ucfo ON uc.instance_id = ucfo.instance_id 
+                           AND ct.template_id = ucfo.template_id
                        WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
                        AND ct.field_name = $2 AND ct.field_type = 'number'
                        AND ctf.field_value ~ '^[0-9.]+$'
-                       AND CAST(ctf.field_value AS FLOAT) >= $3""",
+                       AND COALESCE(ucfo.effective_numeric_value, CAST(ctf.field_value AS FLOAT)) >= $3""",
                     payload.user_id, mission['requirement_field'], mission['requirement_rolled']
                 )
                 print(f"[DEBUG] Qualifying cards count: {has_qualifying_card}")
@@ -631,17 +633,20 @@ class MissionCommands(commands.Cog):
             if target_merge_level is not None:
                 qualifying_card = await conn.fetchrow(
                     """SELECT uc.instance_id, uc.card_id, c.name, c.rarity,
-                              uc.merge_level, ctf.field_value
+                              uc.merge_level, 
+                              COALESCE(ucfo.effective_numeric_value, CAST(ctf.field_value AS FLOAT)) as effective_value
                        FROM user_cards uc
                        JOIN cards c ON uc.card_id = c.card_id
                        JOIN card_template_fields ctf ON c.card_id = ctf.card_id
                        JOIN card_templates ct ON ctf.template_id = ct.template_id
+                       LEFT JOIN user_card_field_overrides ucfo ON uc.instance_id = ucfo.instance_id 
+                           AND ct.template_id = ucfo.template_id
                        WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
                        AND LOWER(c.name) = LOWER($2)
                        AND uc.merge_level = $5
                        AND ct.field_name = $3 AND ct.field_type = 'number'
                        AND ctf.field_value ~ '^[0-9.]+$'
-                       AND CAST(ctf.field_value AS FLOAT) >= $4
+                       AND COALESCE(ucfo.effective_numeric_value, CAST(ctf.field_value AS FLOAT)) >= $4
                        AND uc.instance_id NOT IN (
                            SELECT card_instance_id FROM active_missions 
                            WHERE status = 'active' AND started_at IS NOT NULL 
@@ -653,16 +658,19 @@ class MissionCommands(commands.Cog):
             else:
                 qualifying_card = await conn.fetchrow(
                     """SELECT uc.instance_id, uc.card_id, c.name, c.rarity,
-                              uc.merge_level, ctf.field_value
+                              uc.merge_level,
+                              COALESCE(ucfo.effective_numeric_value, CAST(ctf.field_value AS FLOAT)) as effective_value
                        FROM user_cards uc
                        JOIN cards c ON uc.card_id = c.card_id
                        JOIN card_template_fields ctf ON c.card_id = ctf.card_id
                        JOIN card_templates ct ON ctf.template_id = ct.template_id
+                       LEFT JOIN user_card_field_overrides ucfo ON uc.instance_id = ucfo.instance_id 
+                           AND ct.template_id = ucfo.template_id
                        WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
                        AND LOWER(c.name) = LOWER($2)
                        AND ct.field_name = $3 AND ct.field_type = 'number'
                        AND ctf.field_value ~ '^[0-9.]+$'
-                       AND CAST(ctf.field_value AS FLOAT) >= $4
+                       AND COALESCE(ucfo.effective_numeric_value, CAST(ctf.field_value AS FLOAT)) >= $4
                        AND uc.instance_id NOT IN (
                            SELECT card_instance_id FROM active_missions 
                            WHERE status = 'active' AND started_at IS NOT NULL 
@@ -810,15 +818,18 @@ class MissionCommands(commands.Cog):
                 return []
             
             cards = await conn.fetch(
-                """SELECT DISTINCT c.name, c.rarity, uc.merge_level, ctf.field_value
+                """SELECT DISTINCT c.name, c.rarity, uc.merge_level, 
+                          COALESCE(ucfo.effective_numeric_value, CAST(ctf.field_value AS FLOAT)) as effective_value
                    FROM user_cards uc
                    JOIN cards c ON uc.card_id = c.card_id
                    JOIN card_template_fields ctf ON c.card_id = ctf.card_id
                    JOIN card_templates ct ON ctf.template_id = ct.template_id
+                   LEFT JOIN user_card_field_overrides ucfo ON uc.instance_id = ucfo.instance_id 
+                       AND ct.template_id = ucfo.template_id
                    WHERE uc.user_id = $1 AND uc.recycled_at IS NULL
                    AND ct.field_name = $2 AND ct.field_type = 'number'
                    AND ctf.field_value ~ '^[0-9.]+$'
-                   AND CAST(ctf.field_value AS FLOAT) >= $3
+                   AND COALESCE(ucfo.effective_numeric_value, CAST(ctf.field_value AS FLOAT)) >= $3
                    AND LOWER(c.name) LIKE LOWER($4)
                    AND uc.instance_id NOT IN (
                        SELECT card_instance_id FROM active_missions 
@@ -834,7 +845,7 @@ class MissionCommands(commands.Cog):
             choices = []
             for card in cards:
                 merge_display = f" ★{card['merge_level']}" if card['merge_level'] > 0 else ""
-                display = f"{card['name']}{merge_display} [{card['rarity']}] ({float(card['field_value']):,.0f})"
+                display = f"{card['name']}{merge_display} [{card['rarity']}] ({float(card['effective_value']):,.0f})"
                 value = f"{card['name']}|{card['merge_level']}"
                 choices.append(app_commands.Choice(name=display[:100], value=value))
             
