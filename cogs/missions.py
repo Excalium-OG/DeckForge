@@ -1329,6 +1329,17 @@ class MissionCommands(commands.Cog):
                 f"💰 Awarded **{final_reward:,}** credits" + 
                 (f" (+{merge_bonus:,} merge bonus)" if merge_bonus > 0 else "")
             )
+            
+            try:
+                guild_name = ctx.guild.name if ctx.guild else "Unknown Server"
+                bonus_text = f" (+{merge_bonus:,} merge bonus)" if merge_bonus > 0 else ""
+                await user.send(
+                    f"🎉 Your mission, **{mission['template_name']}** [{mission['rarity_rolled']}], "
+                    f"has completed in **{guild_name}**. It was successful, and you have gained "
+                    f"**{final_reward:,}** credits!{bonus_text}"
+                )
+            except Exception as e:
+                print(f"Error sending mission completion DM to {user.id}: {e}")
 
 
 async def setup(bot):
