@@ -62,11 +62,13 @@ class MissionCommands(commands.Cog):
         self.mission_lifecycle_loop.cancel()
         self.cooldown_notification_loop.cancel()
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(minutes=1)
     async def mission_check_loop(self):
-        """Check activity levels and spawn missions hourly"""
+        """Check activity levels and spawn missions every hour on the hour"""
         try:
-            await self.check_and_spawn_missions()
+            now = datetime.now(timezone.utc)
+            if now.minute == 0:
+                await self.check_and_spawn_missions()
         except Exception as e:
             print(f"Mission check loop error: {e}")
 
@@ -206,10 +208,31 @@ class MissionCommands(commands.Cog):
         """Spawn a new mission in the guild"""
         template = random.choice(templates)
         
-        activity_bonus = min(activity['message_count'] / 50, 1.0)
-        rarity_weights = RARITY_WEIGHTS.copy()
-        for rarity in ['Epic', 'Legendary', 'Mythic']:
-            rarity_weights[rarity] = int(rarity_weights[rarity] * (1 + activity_bonus))
+        message_count = activity['message_count']
+        unique_users = len(activity['unique_users'])
+        
+        if message_count >= 150 and unique_users >= 4:
+            rarity_weights = {
+                'Common': 20,
+                'Uncommon': 22,
+                'Exceptional': 20,
+                'Rare': 14,
+                'Epic': 8,
+                'Legendary': 10,
+                'Mythic': 6
+            }
+        elif message_count >= 50 and unique_users >= 3:
+            rarity_weights = {
+                'Common': 28,
+                'Uncommon': 24,
+                'Exceptional': 18,
+                'Rare': 14,
+                'Epic': 8,
+                'Legendary': 6,
+                'Mythic': 2
+            }
+        else:
+            rarity_weights = RARITY_WEIGHTS.copy()
         
         total_weight = sum(rarity_weights.values())
         roll = random.uniform(0, total_weight)
@@ -245,7 +268,7 @@ class MissionCommands(commands.Cog):
         duration_rolled = max(1, int(base_duration + dur_variance))
         
         now = datetime.now(timezone.utc)
-        reaction_expires = now + timedelta(minutes=20)
+        reaction_expires = now + timedelta(minutes=45)
         
         result = await conn.fetchrow(
             """INSERT INTO active_missions 
@@ -1153,7 +1176,7 @@ class MissionCommands(commands.Cog):
                 inline=False
             )
             
-            embed.set_footer(text=f"React with ✅ within 20 minutes to accept! | Mission #{mission_id}")
+            embed.set_footer(text=f"React with ✅ within 45 minutes to accept! | Mission #{mission_id}")
             embed.timestamp = now
             
             try:
