@@ -529,7 +529,7 @@ class MissionCommands(commands.Cog):
                 print(f"[DEBUG] Got channel: {channel}")
                 if channel:
                     message = await channel.fetch_message(payload.message_id)
-                    user = self.bot.get_user(payload.user_id)
+                    user = await self.bot.fetch_user(payload.user_id)
                     print(f"[DEBUG] Got message and user: {user}")
                     
                     embed = message.embeds[0] if message.embeds else None
